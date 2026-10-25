@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// The connection URL lives in prisma7.config.ts (Prisma 7 no longer reads it
+// from here).
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  LEARNER
+}
+
+// One value per top-level tab in the app. ADMIN tokens ignore these and get
+// everything.
+enum Menu {
+  PLAN
+  VOCAB
+  REVIEW
+  SCENARIO
+  ERRORS
+  GRAMMAR
+  PRONUNCIATION
+}
+
+enum Level {
+  BEGINNER
+  PRE
+  INTER
+  UPPER
+}
+
+// 1:1 with the localStorage keys the app used before it had a backend (see
+// goodenglish-fe const/storage-keys.constant.ts). Each document stores the
+// exact JSON that key held, so the client-side stores keep working unchanged
+// and old exported progress files stay compatible.
+enum ProgressKey {
+  KNOWN
+  SRS
+  OWN
+  CUSTOM
+  DONE
+  LEVEL
+  WEEKS
+  ASKPRAC
+  PLAN
+  PRACTICE_SESSION
+  FLIP
+  SEARCH_SCOPE
+}
+
+// An access token IS the learner's identity: there are no user accounts.
+// The plaintext token is shown once at creation and never stored — only its
+// SHA-256 hash (enough here because tokens carry 256 bits of randomness, so
+// there's nothing to brute-force that a slow hash would protect).
+model AccessToken {
+  id          String    @id @default(cuid())
+  label       String    @db.VarChar(100)
+  tokenHash   String    @unique @db.Char(64)
+  // First characters of the plaintext (e.g. "ge_k3F9x"), so admins can tell
+  // tokens apart without the secret.
+  tokenPrefix String    @db.VarChar(16)
+  role        Role      @default(LEARNER)
+  menus       Menu[]
+  levels      Level[]
+  maxDevices  Int       @default(2)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions TokenSession[]
+  progress ProgressDoc[]
+
+  @@map("access_tokens")
+}
+
+// One row per device that redeemed the token. Active = not revoked and not
+// past expiresAt; the active count is what maxDevices limits.
+model TokenSession {
+  id            String      @id @default(cuid())
+  accessTokenId String
+  accessToken   AccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  deviceLabel   String      @db.VarChar(120)
+  expiresAt     DateTime
+  lastSeenAt    DateTime    @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([accessTokenId])
+  @@map("token_sessions")
+}
+
+model ProgressDoc {
+  id            String      @id @default(cuid())
+  accessTokenId String
+  accessToken   AccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  key           ProgressKey
+  data          Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([accessTokenId, key])
+  @@map("progress_docs")
+}

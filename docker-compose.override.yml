@@ -1,0 +1,16 @@
+# Automatically merged by Compose alongside docker-compose.yml — local-dev
+# only. Do NOT copy this file to the VPS.
+#
+# Publishes Postgres on 127.0.0.1:5452 so `pnpm start:dev` (a plain Node
+# process) and `prisma migrate dev` can reach it. Not 5432: this machine may
+# already run a native Postgres there.
+services:
+  db:
+    ports:
+      - '127.0.0.1:5452:5432'
+  migrate:
+    env_file:
+      - .env.compose
+  app:
+    env_file:
+      - .env.compose
