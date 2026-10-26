@@ -136,6 +136,28 @@ export class AdminTokensService {
     return this.toItem({ ...token, activeDevices: 0 });
   }
 
+  // "Regenerate": the plaintext can't be shown again (only its hash is
+  // stored), so issue a new one in place. Same id, so settings and progress
+  // stay; every device on the old token is signed out.
+  async regenerate(id: string): Promise<CreatedTokenDto> {
+    await this.findOrThrow(id);
+    const { plain, hash, prefix } = generateAccessToken();
+    const [token] = await this.prisma.$transaction([
+      this.prisma.accessToken.update({
+        where: { id },
+        data: { tokenHash: hash, tokenPrefix: prefix },
+      }),
+      this.prisma.tokenSession.updateMany({
+        where: { accessTokenId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+    return new CreatedTokenDto({
+      token: plain,
+      item: this.toItem({ ...token, activeDevices: 0 }),
+    });
+  }
+
   // Deletes the token together with its sessions and progress (cascade).
   async remove(id: string): Promise<void> {
     const current = await this.findOrThrow(id);

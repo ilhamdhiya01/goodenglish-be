@@ -108,3 +108,23 @@ model ProgressDoc {
   @@unique([accessTokenId, key])
   @@map("progress_docs")
 }
+
+// Vocabulary added by an admin on top of the words bundled in the frontend.
+// Unlike a learner's own "Kataku" (the CUSTOM progress doc), these are shared:
+// every token that may open `level` sees them in that week.
+model SharedWord {
+  id        String   @id @default(cuid())
+  level     Level
+  week      Int
+  // Word type id from the frontend (w, pv, col, st, ex, cj).
+  type      String   @db.VarChar(8)
+  en        String   @db.VarChar(120)
+  meaning   String   @db.VarChar(300)
+  pron      String   @default("") @db.VarChar(120)
+  example   String   @default("") @db.VarChar(500)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([level, week])
+  @@map("shared_words")
+}

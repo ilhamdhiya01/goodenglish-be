@@ -4,6 +4,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProgressModule } from './modules/progress/progress.module';
+import { WordsModule } from './modules/words/words.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ProgressModule } from './modules/progress/progress.module';
     AuthModule,
     ProgressModule,
     AdminModule,
+    WordsModule,
   ],
   controllers: [],
   providers: [],

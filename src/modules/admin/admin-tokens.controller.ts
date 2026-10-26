@@ -57,6 +57,13 @@ export class AdminTokensController {
     return this.tokensService.activate(id);
   }
 
+  @Post(':id/regenerate')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Token regenerated')
+  regenerate(@Param('id') id: string): Promise<CreatedTokenDto> {
+    return this.tokensService.regenerate(id);
+  }
+
   @Delete(':id/sessions')
   @ResponseMessage('Devices reset')
   resetSessions(@Param('id') id: string): Promise<TokenListItemDto> {

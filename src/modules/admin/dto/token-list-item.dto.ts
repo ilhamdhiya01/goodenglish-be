@@ -28,7 +28,7 @@ export class TokenListItemDto {
 }
 
 // The only response that ever carries the plaintext token: right after
-// creation. It can't be retrieved again later.
+// creation or regeneration. It can't be retrieved again later.
 export class CreatedTokenDto {
   token!: string;
   item!: TokenListItemDto;

@@ -110,6 +110,27 @@ describe('AdminTokensService', () => {
     );
   });
 
+  it('regenerates in place: new hash, same id, every device signed out', async () => {
+    const { service, prisma } = setup();
+    const res = await service.regenerate('adm1');
+
+    const args = prisma.accessToken.update.mock.calls[0][0] as {
+      where: object;
+      data: Record<string, unknown>;
+    };
+    expect(args.where).toEqual({ id: 'adm1' });
+    expect(res.token).toMatch(/^ge_/);
+    expect(args.data.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(args.data.tokenPrefix).toBe(res.token.slice(0, 11));
+    expect(JSON.stringify(args.data)).not.toContain(res.token);
+    expect(prisma.tokenSession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { accessTokenId: 'adm1', revokedAt: null },
+      }),
+    );
+    expect(res.item).toMatchObject({ id: 'adm1', activeDevices: 0 });
+  });
+
   it('404s on an unknown token', async () => {
     const { service, prisma } = setup();
     prisma.accessToken.findUnique.mockResolvedValue(null);
