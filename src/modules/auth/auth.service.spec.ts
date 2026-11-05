@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { MENU_WIRE_VALUES } from '../../common/token/access-enums';
 import { hashAccessToken } from '../../common/token/access-token.util';
 import { AuthService } from './auth.service';
 
@@ -119,7 +120,7 @@ describe('AuthService.redeem', () => {
       makeToken({ role: 'ADMIN', menus: [], levels: [] }),
     );
     const res = await service.redeem(PLAIN, 'x');
-    expect(res.session.menus).toHaveLength(7);
+    expect(res.session.menus).toEqual(MENU_WIRE_VALUES);
     expect(res.session.levels).toEqual(['beginner', 'pre', 'inter', 'upper']);
   });
 });

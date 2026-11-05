@@ -24,6 +24,7 @@ enum Menu {
   ERRORS
   GRAMMAR
   PRONUNCIATION
+  CHEATSHEET
 }
 
 enum Level {

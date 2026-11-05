@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "Menu" ADD VALUE 'CHEATSHEET';

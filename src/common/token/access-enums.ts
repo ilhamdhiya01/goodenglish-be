@@ -12,6 +12,7 @@ export const MENU_WIRE = {
   errors: Menu.ERRORS,
   grammar: Menu.GRAMMAR,
   pronunciation: Menu.PRONUNCIATION,
+  cheatsheet: Menu.CHEATSHEET,
 } as const satisfies Record<string, Menu>;
 
 export const LEVEL_WIRE = {
