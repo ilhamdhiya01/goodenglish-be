@@ -45,15 +45,18 @@ export const contextBlock = (ctx?: AiContextDto): string => {
 };
 
 // Spelling is part of learning the language: a typo in an English word the
-// learner typed is pointed out, never silently corrected. Indonesian typos
-// are ignored unless they change the meaning — flagging them is just noise.
+// learner typed is pointed out, never silently corrected. Indonesian and
+// slang are never flagged — flagging them is just noise. With the chat
+// history sent along, flash-lite also flagged words from earlier messages,
+// hence "PESAN TERAKHIR" and the explicit ban (the FE filters those too).
 // Put first and spelled out with an example: listed among the other rules,
 // gemini-3.x answered past the typos without a word (tested Nov 2026).
-const CHAT_TYPOS = `ATURAN PERTAMA (WAJIB): sebelum menjawab, periksa ejaan setiap kata bahasa Inggris di pesan terakhir pelajar, termasuk istilah grammar seperti "present perfect".
-- Kalau ada yang salah ketik, BARIS PERTAMA jawabanmu harus persis berformat: Ejaan: *kata salah* → **kata benar** (beberapa typo dipisah koma). Lalu baris kosong, lalu jawaban.
+const CHAT_TYPOS = `ATURAN PERTAMA (WAJIB): sebelum menjawab, periksa ejaan kata-kata BAHASA INGGRIS di PESAN TERAKHIR pelajar saja, termasuk istilah grammar seperti "present perfect".
+- Kalau ada kata bahasa Inggris yang salah ketik, BARIS PERTAMA jawabanmu harus persis berformat: Ejaan: *kata salah* → **kata benar** (beberapa typo dipisah koma). Lalu baris kosong, lalu jawaban.
   Contoh: pelajar menulis "apa bedanya somtimes dan sometime?" → baris pertama: Ejaan: *somtimes* → **sometimes**
-- Kalau tidak ada typo, langsung jawab tanpa menyebut ejaan.
-- Abaikan salah ketik bahasa Indonesia, kecuali membuat maksud pertanyaan tidak jelas.
+- Hanya kata yang benar-benar tertulis di pesan terakhir. Jangan pernah menyebut kata dari pesan-pesan sebelumnya.
+- Bahasa Indonesia dan bahasa gaul TIDAK diperiksa sama sekali, walaupun mirip kata Inggris (misalnya "make" yang berarti pakai, "cuman", "gw", "gmn"). Selama maksudnya bisa dipahami, abaikan.
+- Jangan tulis pasangan yang kata salah dan kata benarnya sama. Kalau tidak ada typo bahasa Inggris, langsung jawab tanpa menyebut ejaan.
 
 `;
 
