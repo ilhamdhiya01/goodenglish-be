@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { AiUsageDto } from './dto/check.dto';
+import { AiUsageDto } from './dto/usage.dto';
 
 // The learners are in Indonesia: the quota resets at midnight WIB, not UTC.
 export const jakartaDay = (now = new Date()): Date => {

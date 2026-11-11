@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  HttpCode,
   HttpStatus,
   Logger,
   Post,
@@ -17,7 +16,7 @@ import type { AccessContext } from '../../common/types/access-context';
 import { AiQuotaService } from './ai-quota.service';
 import { AiService } from './ai.service';
 import { ChatDto } from './dto/chat.dto';
-import { AiUsageDto, CheckDto, CheckResultDto } from './dto/check.dto';
+import { AiUsageDto } from './dto/usage.dto';
 
 const sse = (event: string | null, data: unknown) =>
   (event ? `event: ${event}\n` : '') + `data: ${JSON.stringify(data)}\n\n`;
@@ -66,16 +65,6 @@ export class AiController {
     } finally {
       res.end();
     }
-  }
-
-  @Post('check')
-  @HttpCode(HttpStatus.OK)
-  @ResponseMessage('Sentence checked')
-  check(
-    @CurrentAccess() access: AccessContext,
-    @Body() dto: CheckDto,
-  ): Promise<CheckResultDto> {
-    return this.ai.check(access, dto);
   }
 
   @Get('usage')
