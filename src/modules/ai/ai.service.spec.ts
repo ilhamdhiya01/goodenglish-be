@@ -8,7 +8,8 @@ import { GoogleGenAI } from '@google/genai';
 import type { AccessContext } from '../../common/types/access-context';
 import type { AiQuotaService } from './ai-quota.service';
 import type { AiSettingsService } from './ai-settings.service';
-import { AiService, parseCheck } from './ai.service';
+import { chatInstruction } from './ai.prompts';
+import { AiService } from './ai.service';
 
 // Same approach as the other specs: DB-bound and network modules are mocked
 // and the service is built with hand-made fakes.
@@ -18,12 +19,11 @@ jest.mock('../../common/prisma/prisma.service', () => ({
 }));
 jest.mock('./ai-settings.service', () => ({ AiSettingsService: class {} }));
 
-const generateContent = jest.fn();
 const generateContentStream = jest.fn();
 jest.mock('@google/genai', () => ({
   ThinkingLevel: { LOW: 'LOW', MINIMAL: 'MINIMAL' },
   GoogleGenAI: jest.fn().mockImplementation(() => ({
-    models: { generateContent, generateContentStream },
+    models: { generateContentStream },
   })),
 }));
 
@@ -51,7 +51,7 @@ function* chunks(...texts: string[]) {
 // What the service sent to Gemini.
 interface SentRequest {
   contents: unknown;
-  config: { systemInstruction: string; responseMimeType?: string };
+  config: { systemInstruction: string };
 }
 const sent = (fn: jest.Mock) => fn.mock.calls[0][0] as SentRequest;
 
@@ -131,80 +131,16 @@ describe('AiService', () => {
     );
     expect(quota.refund).toHaveBeenCalledWith('t1');
   });
-
-  it('returns a structured sentence check', async () => {
-    const { service } = setup();
-    generateContent.mockResolvedValue({
-      text: JSON.stringify({
-        verdict: 'incorrect',
-        corrected: 'I have a car.',
-        explanation: 'Subjek I memakai have.',
-        alternatives: ['I own a car.'],
-      }),
-    });
-    const res = await service.check(access(), { sentence: 'I has a car.' });
-    expect(res).toMatchObject({
-      verdict: 'incorrect',
-      corrected: 'I have a car.',
-      alternatives: ['I own a car.'],
-    });
-    expect(sent(generateContent).config.responseMimeType).toBe(
-      'application/json',
-    );
-  });
 });
 
-describe('parseCheck', () => {
-  it('keeps real typos, drops junk ones, and never calls a typo "correct"', () => {
-    const res = parseCheck(
-      JSON.stringify({
-        verdict: 'correct',
-        corrected: 'I sometimes go to school.',
-        explanation: 'Ada salah ketik.',
-        alternatives: [],
-        typos: [
-          { wrong: ' somtimes ', correct: 'sometimes' },
-          { wrong: 'go', correct: 'Go' },
-          { wrong: '', correct: 'x' },
-          { wrong: 'skool' },
-        ],
-      }),
-      'I somtimes go to skool.',
-    );
-    expect(res.typos).toEqual([{ wrong: 'somtimes', correct: 'sometimes' }]);
-    expect(res.verdict).toBe('almost');
-  });
-
-  it('treats a missing typos field as none', () => {
-    const res = parseCheck(
-      JSON.stringify({
-        verdict: 'correct',
-        corrected: 'I like tea.',
-        explanation: 'Sudah benar.',
-        alternatives: [],
-      }),
-      'I like tea.',
-    );
-    expect(res.typos).toEqual([]);
-    expect(res.verdict).toBe('correct');
-  });
-
-  it('falls back to the original sentence and drops junk alternatives', () => {
-    const res = parseCheck(
-      JSON.stringify({
-        verdict: 'correct',
-        corrected: ' ',
-        explanation: 'Sudah benar.',
-        alternatives: ['', 3, 'A', 'B', 'C'],
-      }),
-      'I like tea.',
-    );
-    expect(res.corrected).toBe('I like tea.');
-    expect(res.alternatives).toEqual(['A', 'B']);
-  });
-
-  it('throws on a reply that is not a check result', () => {
-    expect(() => parseCheck('{"verdict":"maybe"}', 'x')).toThrow();
-    expect(() => parseCheck(undefined, 'x')).toThrow();
+describe('chatInstruction', () => {
+  // The rules that replaced the one-shot sentence check: keep the learner's
+  // tense, accept contractions, and read clarifications as context.
+  it('tells the model how to correct a sentence inside the chat', () => {
+    const prompt = chatInstruction();
+    expect(prompt).toContain('Koreksi kalimat');
+    expect(prompt).toContain('Pertahankan tense');
+    expect(prompt).toContain("I'm");
+    expect(prompt).toContain('riwayat percakapan');
   });
 });
