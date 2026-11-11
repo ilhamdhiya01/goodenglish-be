@@ -101,6 +101,7 @@ export class TokenSessionGuard implements CanActivate {
       menus: isAdmin ? Object.values(Menu) : token.menus,
       levels: isAdmin ? Object.values(Level) : token.levels,
       expiresAt: token.expiresAt,
+      aiDailyLimit: token.aiDailyLimit,
     };
     return true;
   }

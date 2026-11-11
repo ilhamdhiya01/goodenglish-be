@@ -3,6 +3,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   LEVEL_WIRE,
@@ -29,7 +30,10 @@ type TokenWithActive = AccessToken & { activeDevices: number };
 
 @Injectable()
 export class AdminTokensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async list(): Promise<TokenListItemDto[]> {
     const tokens = await this.prisma.accessToken.findMany({
@@ -56,6 +60,10 @@ export class AdminTokensService {
         levels: levelsFromWire(dto.levels),
         maxDevices: dto.maxDevices,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        aiDailyLimit:
+          dto.aiDailyLimit === undefined
+            ? (this.config.get<number>('ai.dailyLimit') ?? 30)
+            : dto.aiDailyLimit,
       },
     });
     return new CreatedTokenDto({
@@ -92,6 +100,9 @@ export class AdminTokensService {
       expiresAt,
       ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
       ...(dto.maxDevices !== undefined ? { maxDevices: dto.maxDevices } : {}),
+      ...(dto.aiDailyLimit !== undefined
+        ? { aiDailyLimit: dto.aiDailyLimit }
+        : {}),
     };
     const token = await this.prisma.accessToken.update({ where: { id }, data });
     return this.withActiveDevices(token);
@@ -212,6 +223,8 @@ export class AdminTokensService {
       menus: Object.keys(MENU_WIRE) as CreateTokenDto['menus'],
       levels: Object.keys(LEVEL_WIRE) as CreateTokenDto['levels'],
       maxDevices: 5,
+      // The owner's own token: no daily cap on Tanya AI.
+      aiDailyLimit: null,
     });
   }
 
@@ -229,7 +242,8 @@ export class AdminTokensService {
     levels: unknown[],
   ) {
     if (role === 'ADMIN') return;
-    if (!menus.length) {
+    // "ai" is the floating chat, not a page: a learner needs at least one tab.
+    if (!menus.some((m) => m !== 'ai')) {
       throw new UnprocessableEntityException({
         field: 'menus',
         message: 'menus_required',
@@ -306,6 +320,7 @@ export class AdminTokensService {
       menus: menusToWire(t.menus),
       levels: levelsToWire(t.levels),
       maxDevices: t.maxDevices,
+      aiDailyLimit: t.aiDailyLimit,
       activeDevices: t.activeDevices,
       status,
       expiresAt: t.expiresAt,

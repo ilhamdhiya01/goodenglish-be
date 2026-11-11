@@ -15,6 +15,8 @@ export class TokenListItemDto {
   menus!: MenuWire[];
   levels!: LevelWire[];
   maxDevices!: number;
+  // Tanya AI questions per day; null = unlimited.
+  aiDailyLimit!: number | null;
   activeDevices!: number;
   status!: TokenStatus;
   expiresAt!: Date | null;

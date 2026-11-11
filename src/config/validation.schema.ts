@@ -18,4 +18,9 @@ export const validationSchema = Joi.object({
   // Only used for CORS in local development, where the FE dev server runs on
   // a different port. In production FE and BE share one origin behind nginx.
   FE_URL: Joi.string().uri().required(),
+  // `openssl rand -hex 32`. Encrypts the Gemini API key saved from Admin ›
+  // Tanya AI. Optional: without it the app runs, but no key can be saved.
+  ENCRYPTION_KEY: Joi.string().hex().length(64).allow('').default(''),
+  // Default questions/day for new tokens; set per token in the admin form.
+  AI_DAILY_LIMIT: Joi.number().integer().min(0).default(30),
 });

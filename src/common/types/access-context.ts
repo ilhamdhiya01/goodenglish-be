@@ -18,4 +18,6 @@ export interface AccessContext {
   menus: Menu[];
   levels: Level[];
   expiresAt: Date | null;
+  // "Tanya AI" questions per day; null = unlimited.
+  aiDailyLimit: number | null;
 }
