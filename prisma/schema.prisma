@@ -25,6 +25,9 @@ enum Menu {
   GRAMMAR
   PRONUNCIATION
   CHEATSHEET
+  // Not a tab: the floating "Tanya AI" chat. Listed here so admins can grant
+  // it per token like any other menu.
+  AI
 }
 
 enum Level {
@@ -58,26 +61,43 @@ enum ProgressKey {
 // SHA-256 hash (enough here because tokens carry 256 bits of randomness, so
 // there's nothing to brute-force that a slow hash would protect).
 model AccessToken {
-  id          String    @id @default(cuid())
-  label       String    @db.VarChar(100)
-  tokenHash   String    @unique @db.Char(64)
+  id           String    @id @default(cuid())
+  label        String    @db.VarChar(100)
+  tokenHash    String    @unique @db.Char(64)
   // First characters of the plaintext (e.g. "ge_k3F9x"), so admins can tell
   // tokens apart without the secret.
-  tokenPrefix String    @db.VarChar(16)
-  role        Role      @default(LEARNER)
-  menus       Menu[]
-  levels      Level[]
-  maxDevices  Int       @default(2)
-  expiresAt   DateTime?
-  revokedAt   DateTime?
-  lastUsedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  tokenPrefix  String    @db.VarChar(16)
+  role         Role      @default(LEARNER)
+  menus        Menu[]
+  levels       Level[]
+  maxDevices   Int       @default(2)
+  // "Tanya AI" questions per day. null = unlimited.
+  aiDailyLimit Int?      @default(30)
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   sessions TokenSession[]
   progress ProgressDoc[]
+  aiUsage  AiUsage[]
 
   @@map("access_tokens")
+}
+
+// Questions asked to the AI per token per day (Asia/Jakarta calendar day),
+// for the daily quota. Only counts are kept: the conversation itself lives in
+// the learner's browser.
+model AiUsage {
+  id            String      @id @default(cuid())
+  accessTokenId String
+  accessToken   AccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  day           DateTime    @db.Date
+  count         Int         @default(0)
+
+  @@unique([accessTokenId, day])
+  @@map("ai_usage")
 }
 
 // One row per device that redeemed the token. Active = not revoked and not
@@ -128,4 +148,19 @@ model SharedWord {
 
   @@index([level, week])
   @@map("shared_words")
+}
+
+// One row (id = 1): the Gemini API key and model behind "Tanya AI", set from
+// the admin dashboard instead of .env. The key is stored AES-256-GCM
+// encrypted with ENCRYPTION_KEY; only its last 4 characters are ever shown.
+model AiSettings {
+  id           Int      @id @default(1)
+  encryptedKey String?
+  keyLast4     String?  @db.VarChar(4)
+  model        String   @default("gemini-3.6-flash") @db.VarChar(100)
+  // Label of the admin token that saved last.
+  updatedBy    String?  @db.VarChar(100)
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_settings")
 }

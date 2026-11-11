@@ -15,4 +15,13 @@ export default () => ({
     secureCookie: (process.env.COOKIE_SECURE ?? 'true') === 'true',
   },
   feUrl: process.env.FE_URL,
+  // 64 hex chars; encrypts secrets stored in the DB (the Gemini API key).
+  encryptionKey: process.env.ENCRYPTION_KEY ?? '',
+  ai: {
+    // The Gemini key and model are set from Admin › Tanya AI (ai_settings
+    // table), not here.
+    // Only the default for new tokens; each token keeps its own
+    // AccessToken.aiDailyLimit (null = unlimited).
+    dailyLimit: Number(process.env.AI_DAILY_LIMIT ?? 30),
+  },
 });

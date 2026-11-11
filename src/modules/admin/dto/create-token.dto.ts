@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   LEVEL_WIRE_VALUES,
@@ -18,6 +19,9 @@ import {
   ROLE_WIRE_VALUES,
   type RoleWire,
 } from '../../../common/token/access-enums';
+
+// Upper bound for a finite per-token AI limit (null means unlimited).
+export const AI_DAILY_LIMIT_MAX = 10000;
 
 export class CreateTokenDto {
   @IsString()
@@ -45,4 +49,12 @@ export class CreateTokenDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  // "Tanya AI" questions per day. null = unlimited; omitted = AI_DAILY_LIMIT.
+  @IsOptional()
+  @ValidateIf((_o, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(AI_DAILY_LIMIT_MAX)
+  aiDailyLimit?: number | null;
 }

@@ -5,6 +5,7 @@ import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 import configuration from '../config/configuration';
 import { validationSchema } from '../config/validation.schema';
+import { EncryptionService } from './encryption/encryption.service';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { PrismaService } from './prisma/prisma.service';
@@ -31,6 +32,7 @@ import { PrismaService } from './prisma/prisma.service';
   ],
   providers: [
     PrismaService,
+    EncryptionService,
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
@@ -47,6 +49,6 @@ import { PrismaService } from './prisma/prisma.service';
       }),
     },
   ],
-  exports: [PrismaService, WinstonModule, ConfigModule],
+  exports: [PrismaService, EncryptionService, WinstonModule, ConfigModule],
 })
 export class CommonModule {}

@@ -40,10 +40,62 @@ const setup = (otherAdmins = 0) => {
     },
     $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
   };
-  return { service: new AdminTokensService(prisma as any), prisma };
+  // AI_DAILY_LIMIT, the default for new tokens.
+  const config = { get: () => 30 };
+  return {
+    service: new AdminTokensService(prisma as any, config as any),
+    prisma,
+  };
 };
 
+const createdData = (prisma: ReturnType<typeof setup>['prisma']) =>
+  prisma.accessToken.create.mock.calls[0][0].data as Record<string, unknown>;
+
 describe('AdminTokensService', () => {
+  it('gives new tokens the default AI limit unless one is chosen', async () => {
+    const base = {
+      label: 'X',
+      menus: ['vocab'],
+      levels: ['pre'],
+      maxDevices: 1,
+    };
+
+    const a = setup();
+    await a.service.create(base as any);
+    expect(createdData(a.prisma).aiDailyLimit).toBe(30);
+
+    const b = setup();
+    await b.service.create({ ...base, aiDailyLimit: null } as any);
+    expect(createdData(b.prisma).aiDailyLimit).toBeNull();
+
+    const c = setup();
+    await c.service.create({ ...base, aiDailyLimit: 5 } as any);
+    expect(createdData(c.prisma).aiDailyLimit).toBe(5);
+  });
+
+  it('changes the AI limit only when the update names it', async () => {
+    const { service, prisma } = setup(1);
+    await service.update('adm1', { aiDailyLimit: null });
+    await service.update('adm1', { label: 'Ilham' });
+    const [first, second] = prisma.accessToken.update.mock.calls.map(
+      (c) => c[0].data as Record<string, unknown>,
+    );
+    expect(first).toHaveProperty('aiDailyLimit', null);
+    expect(second).not.toHaveProperty('aiDailyLimit');
+  });
+
+  it('refuses a learner token whose only menu is Tanya AI', async () => {
+    const { service } = setup();
+    await expect(
+      service.create({
+        label: 'X',
+        menus: ['ai'],
+        levels: ['pre'],
+        maxDevices: 1,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
   it('stores only the hash and returns the plaintext once', async () => {
     const { service, prisma } = setup();
     const res = await service.create({

@@ -19,8 +19,10 @@ import {
   ROLE_WIRE_VALUES,
   type RoleWire,
 } from '../../../common/token/access-enums';
+import { AI_DAILY_LIMIT_MAX } from './create-token.dto';
 
-// Every field optional; `expiresAt: null` explicitly removes the expiry.
+// Every field optional; `expiresAt: null` explicitly removes the expiry and
+// `aiDailyLimit: null` makes Tanya AI unlimited.
 export class UpdateTokenDto {
   @IsOptional()
   @IsString()
@@ -52,4 +54,12 @@ export class UpdateTokenDto {
   @ValidateIf((_o, value) => value !== null)
   @IsDateString()
   expiresAt?: string | null;
+
+  // null = unlimited.
+  @IsOptional()
+  @ValidateIf((_o, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(AI_DAILY_LIMIT_MAX)
+  aiDailyLimit?: number | null;
 }
