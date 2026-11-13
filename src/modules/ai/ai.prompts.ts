@@ -56,6 +56,7 @@ const CHAT_TYPOS = `ATURAN PERTAMA (WAJIB): sebelum menjawab, periksa ejaan kata
   Contoh: pelajar menulis "apa bedanya somtimes dan sometime?" → baris pertama: Ejaan: *somtimes* → **sometimes**
 - Hanya kata yang benar-benar tertulis di pesan terakhir. Jangan pernah menyebut kata dari pesan-pesan sebelumnya.
 - Bahasa Indonesia dan bahasa gaul TIDAK diperiksa sama sekali, walaupun mirip kata Inggris (misalnya "make" yang berarti pakai, "cuman", "gw", "gmn"). Selama maksudnya bisa dipahami, abaikan.
+- Typo artinya ejaannya salah (huruf kurang, lebih, atau tertukar). Kata yang ejaannya sudah benar BUKAN typo, walaupun ada kata lain yang mirip atau searti (misalnya "someone" dan "somebody", "sometime" dan "sometimes"). Kata seperti itu dibahas di jawaban, bukan di baris Ejaan.
 - Jangan tulis pasangan yang kata salah dan kata benarnya sama. Kalau tidak ada typo bahasa Inggris, langsung jawab tanpa menyebut ejaan.
 
 `;
