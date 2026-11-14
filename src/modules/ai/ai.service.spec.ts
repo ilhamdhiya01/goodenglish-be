@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
 import type { AccessContext } from '../../common/types/access-context';
+import type { AiConversationsService } from './ai-conversations.service';
 import type { AiQuotaService } from './ai-quota.service';
 import type { AiSettingsService } from './ai-settings.service';
 import { chatInstruction } from './ai.prompts';
@@ -33,14 +34,19 @@ const access = (menus: string[] = ['AI']) =>
 // `apiKey: ''` = no key saved in Admin › Tanya AI.
 const setup = (apiKey = 'key') => {
   const quota = { consume: jest.fn(), refund: jest.fn() };
+  const conversations = {
+    assertOwned: jest.fn(),
+    saveQuestion: jest.fn().mockResolvedValue('c1'),
+  };
   const settings = {
     active: jest.fn().mockResolvedValue(apiKey ? { apiKey, model: 'm' } : null),
   };
   const service = new AiService(
     settings as unknown as AiSettingsService,
     quota as unknown as AiQuotaService,
+    conversations as unknown as AiConversationsService,
   );
-  return { service, quota, settings };
+  return { service, quota, settings, conversations };
 };
 
 // A plain generator is enough: `for await` also walks sync iterables.
@@ -109,7 +115,7 @@ describe('AiService', () => {
     const { service, quota } = setup();
     generateContentStream.mockResolvedValue(chunks('Belum ', 'tepat.'));
 
-    const stream = await service.startChat(access(), ask());
+    const { stream } = await service.startChat(access(), ask());
     const out: string[] = [];
     for await (const t of stream) out.push(t);
 
@@ -124,12 +130,38 @@ describe('AiService', () => {
   });
 
   it('gives the question back when Gemini refuses the request', async () => {
-    const { service, quota } = setup();
+    const { service, quota, conversations } = setup();
     generateContentStream.mockRejectedValue(new Error('bad key'));
     await expect(service.startChat(access(), ask())).rejects.toBeInstanceOf(
       BadGatewayException,
     );
     expect(quota.refund).toHaveBeenCalledWith('t1');
+    expect(conversations.saveQuestion).not.toHaveBeenCalled();
+  });
+
+  it('stores the accepted question with its word card in a new thread', async () => {
+    const { service, conversations } = setup();
+    generateContentStream.mockResolvedValue(chunks('ok'));
+    const { conversationId } = await service.startChat(access(), ask());
+
+    expect(conversationId).toBe('c1');
+    expect(conversations.assertOwned).not.toHaveBeenCalled();
+    expect(conversations.saveQuestion).toHaveBeenCalledWith(
+      't1',
+      undefined,
+      'Is "I has a car" correct?',
+      { word: 'have', meaning: undefined },
+    );
+  });
+
+  it('checks a given thread belongs to the token before taking quota', async () => {
+    const { service, quota, conversations } = setup();
+    conversations.assertOwned.mockRejectedValue(new Error('not found'));
+    await expect(
+      service.startChat(access(), { ...ask(), conversationId: 'other' }),
+    ).rejects.toThrow('not found');
+    expect(conversations.assertOwned).toHaveBeenCalledWith('t1', 'other');
+    expect(quota.consume).not.toHaveBeenCalled();
   });
 });
 

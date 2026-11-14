@@ -12,7 +12,7 @@ import {
 } from 'class-validator';
 import { AiContextDto } from './ai-context.dto';
 
-// Gemini's own role names: the frontend stores the conversation in them.
+// Gemini's own role names, also used on the wire for stored messages.
 export const AI_ROLES = ['user', 'model'] as const;
 export type AiRole = (typeof AI_ROLES)[number];
 
@@ -30,13 +30,19 @@ export class AiMessageDto {
   text!: string;
 }
 
-// The conversation is kept in the learner's browser; each request carries its
-// most recent turns so the model has the context. The last one is the new
-// question (checked in AiService).
+// Each request carries the conversation's most recent turns so the model has
+// the context; the last one is the new question (checked in AiService). The
+// server stores the question and answer under `conversationId`, or starts a
+// new thread when it's missing (AiConversationsService).
 export class ChatDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  conversationId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(30)
   @ValidateNested({ each: true })
   @Type(() => AiMessageDto)
   messages!: AiMessageDto[];

@@ -9,6 +9,7 @@ import {
 import { GoogleGenAI, ThinkingLevel, type Content } from '@google/genai';
 import type { AccessContext } from '../../common/types/access-context';
 import { Menu } from '../../generated/prisma/enums';
+import { AiConversationsService } from './ai-conversations.service';
 import { AiQuotaService } from './ai-quota.service';
 import { AiSettingsService } from './ai-settings.service';
 import { createGemini } from './gemini.client';
@@ -19,6 +20,18 @@ import { ChatDto, MAX_QUESTION_CHARS } from './dto/chat.dto';
 // explanations (MINIMAL halved the wait for the first words in testing).
 const CHAT_THINKING = { thinkingLevel: ThinkingLevel.MINIMAL };
 
+// Only tokens granted the AI menu may ask or read their history.
+export const assertAiMenu = (access: AccessContext): void => {
+  if (!access.menus.includes(Menu.AI)) {
+    throw new ForbiddenException({ field: '', message: 'ai_not_allowed' });
+  }
+};
+
+export interface ChatStart {
+  conversationId: string;
+  stream: AsyncGenerator<string>;
+}
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -28,6 +41,7 @@ export class AiService {
   constructor(
     private readonly settings: AiSettingsService,
     private readonly quota: AiQuotaService,
+    private readonly conversations: AiConversationsService,
   ) {}
 
   // Everything that can reject a request, run before the SSE headers go out
@@ -36,9 +50,7 @@ export class AiService {
   private async gate(
     access: AccessContext,
   ): Promise<{ client: GoogleGenAI; model: string }> {
-    if (!access.menus.includes(Menu.AI)) {
-      throw new ForbiddenException({ field: '', message: 'ai_not_allowed' });
-    }
+    assertAiMenu(access);
     const active = await this.settings.active();
     if (!active) {
       throw new ServiceUnavailableException({
@@ -56,12 +68,14 @@ export class AiService {
   }
 
   // Starts the answer stream and returns its text chunks. Quota is taken
-  // here and given back if Gemini refuses the request outright.
+  // here and given back if Gemini refuses the request outright. The question
+  // is stored only once Gemini has accepted it (the answer is stored by the
+  // controller when the stream ends), so a refused request leaves no trace.
   async startChat(
     access: AccessContext,
     dto: ChatDto,
     abortSignal?: AbortSignal,
-  ): Promise<AsyncGenerator<string>> {
+  ): Promise<ChatStart> {
     const { client, model } = await this.gate(access);
     const last = dto.messages[dto.messages.length - 1];
     if (last.role !== 'user' || last.text.length > MAX_QUESTION_CHARS) {
@@ -69,6 +83,9 @@ export class AiService {
         field: 'messages',
         message: 'ai_bad_question',
       });
+    }
+    if (dto.conversationId) {
+      await this.conversations.assertOwned(access.tokenId, dto.conversationId);
     }
     await this.quota.consume(access.tokenId, access.aiDailyLimit);
 
@@ -94,8 +111,20 @@ export class AiService {
       this.logger.error(err instanceof Error ? err.message : err);
       throw new BadGatewayException({ field: '', message: 'ai_failed' });
     }
-    return (async function* () {
-      for await (const chunk of stream) if (chunk.text) yield chunk.text;
-    })();
+    const word = dto.context?.word
+      ? { word: dto.context.word, meaning: dto.context.meaning }
+      : undefined;
+    const conversationId = await this.conversations.saveQuestion(
+      access.tokenId,
+      dto.conversationId,
+      last.text,
+      word,
+    );
+    return {
+      conversationId,
+      stream: (async function* () {
+        for await (const chunk of stream) if (chunk.text) yield chunk.text;
+      })(),
+    };
   }
 }

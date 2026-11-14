@@ -79,16 +79,16 @@ model AccessToken {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  sessions TokenSession[]
-  progress ProgressDoc[]
-  aiUsage  AiUsage[]
+  sessions        TokenSession[]
+  progress        ProgressDoc[]
+  aiUsage         AiUsage[]
+  aiConversations AiConversation[]
 
   @@map("access_tokens")
 }
 
 // Questions asked to the AI per token per day (Asia/Jakarta calendar day),
-// for the daily quota. Only counts are kept: the conversation itself lives in
-// the learner's browser.
+// for the daily quota. The conversations themselves are in AiConversation.
 model AiUsage {
   id            String      @id @default(cuid())
   accessTokenId String
@@ -98,6 +98,47 @@ model AiUsage {
 
   @@unique([accessTokenId, day])
   @@map("ai_usage")
+}
+
+// Gemini's own role names, upper-cased like the other enums.
+enum AiRole {
+  USER
+  MODEL
+}
+
+// A "Tanya AI" thread. Belongs to the token, so every device that redeemed it
+// sees the same history. "Percakapan baru" starts a new one; old threads stay
+// until the learner deletes them (or the token is deleted).
+model AiConversation {
+  id            String          @id @default(cuid())
+  accessTokenId String
+  accessToken   AccessToken     @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  // The first question, cut to fit.
+  title         String          @db.VarChar(120)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  messages      AiChatMessage[]
+
+  @@index([accessTokenId, updatedAt])
+  @@map("ai_conversations")
+}
+
+// Written by POST /ai/chat itself: the question once Gemini accepts it, the
+// answer once it has streamed. Failed replies are never stored.
+model AiChatMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiRole
+  text           String         @db.Text
+  // The word card the question came from (context.word / context.meaning),
+  // shown as a chip.
+  word           String?        @db.VarChar(120)
+  wordMeaning    String?        @db.VarChar(300)
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("ai_chat_messages")
 }
 
 // One row per device that redeemed the token. Active = not revoked and not
