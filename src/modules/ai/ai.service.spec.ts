@@ -166,6 +166,12 @@ describe('AiService', () => {
 });
 
 describe('chatInstruction', () => {
+  it('asks for the Indonesian meaning after every English sentence', () => {
+    const prompt = chatInstruction();
+    expect(prompt).toContain('WAJIB langsung diikuti artinya');
+    expect(prompt).toContain('(*Aku ikut les piano setiap Sabtu.*)');
+  });
+
   // The rules that replaced the one-shot sentence check: keep the learner's
   // tense, accept contractions, and read clarifications as context.
   it('tells the model how to correct a sentence inside the chat', () => {
