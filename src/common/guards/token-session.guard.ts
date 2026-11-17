@@ -102,6 +102,7 @@ export class TokenSessionGuard implements CanActivate {
       levels: isAdmin ? Object.values(Level) : token.levels,
       expiresAt: token.expiresAt,
       aiDailyLimit: token.aiDailyLimit,
+      roleplayDailyLimit: token.roleplayDailyLimit,
     };
     return true;
   }

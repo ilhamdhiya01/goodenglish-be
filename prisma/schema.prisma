@@ -28,6 +28,9 @@ enum Menu {
   // Not a tab: the floating "Tanya AI" chat. Listed here so admins can grant
   // it per token like any other menu.
   AI
+  // Not a tab either: "Main peran" (voice roleplay with the AI) inside
+  // Skenario. Needs SCENARIO too.
+  ROLEPLAY
 }
 
 enum Level {
@@ -54,6 +57,10 @@ enum ProgressKey {
   PRACTICE_SESSION
   FLIP
   SEARCH_SCOPE
+  // Added with "Main peran": the learner's roleplay history (transcripts and
+  // end-of-session summaries) and the mistakes collected from them.
+  ROLEPLAY
+  MISTAKES
 }
 
 // An access token IS the learner's identity: there are no user accounts.
@@ -61,28 +68,31 @@ enum ProgressKey {
 // SHA-256 hash (enough here because tokens carry 256 bits of randomness, so
 // there's nothing to brute-force that a slow hash would protect).
 model AccessToken {
-  id           String    @id @default(cuid())
-  label        String    @db.VarChar(100)
-  tokenHash    String    @unique @db.Char(64)
+  id                 String    @id @default(cuid())
+  label              String    @db.VarChar(100)
+  tokenHash          String    @unique @db.Char(64)
   // First characters of the plaintext (e.g. "ge_k3F9x"), so admins can tell
   // tokens apart without the secret.
-  tokenPrefix  String    @db.VarChar(16)
-  role         Role      @default(LEARNER)
-  menus        Menu[]
-  levels       Level[]
-  maxDevices   Int       @default(2)
+  tokenPrefix        String    @db.VarChar(16)
+  role               Role      @default(LEARNER)
+  menus              Menu[]
+  levels             Level[]
+  maxDevices         Int       @default(2)
   // "Tanya AI" questions per day. null = unlimited.
-  aiDailyLimit Int?      @default(30)
-  expiresAt    DateTime?
-  revokedAt    DateTime?
-  lastUsedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  aiDailyLimit       Int?      @default(30)
+  // "Main peran" sessions per day. null = unlimited.
+  roleplayDailyLimit Int?      @default(3)
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  lastUsedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  sessions        TokenSession[]
-  progress        ProgressDoc[]
-  aiUsage         AiUsage[]
-  aiConversations AiConversation[]
+  sessions         TokenSession[]
+  progress         ProgressDoc[]
+  aiUsage          AiUsage[]
+  aiConversations  AiConversation[]
+  roleplaySessions RoleplaySession[]
 
   @@map("access_tokens")
 }
@@ -204,4 +214,33 @@ model AiSettings {
   updatedAt    DateTime @updatedAt
 
   @@map("ai_settings")
+}
+
+// One "Main peran" session (voice roleplay inside Skenario). The server keeps
+// only what it must enforce or report: the daily quota (rows per `day`), the
+// turn and help caps, and the minutes shown in the admin summary. Transcripts
+// and summaries live in the learner's ROLEPLAY progress doc.
+model RoleplaySession {
+  id              String      @id @default(cuid())
+  accessTokenId   String
+  accessToken     AccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  // Asia/Jakarta calendar day the session started on (quota bucket).
+  day             DateTime    @db.Date
+  scenarioId      String      @db.VarChar(40)
+  // Roles, mission, steps, key phrases and level sent at start; reused for
+  // every turn so the client can't change the mission mid-session.
+  context         Json
+  stepsDone       Int[]       @default([])
+  userTurns       Int         @default(0)
+  helpCount       Int         @default(0)
+  // Spoken answers written down by Gemini ("Main peran" mic).
+  transcribeCount Int         @default(0)
+  startedAt       DateTime    @default(now())
+  endedAt         DateTime?
+  durationSec     Int?
+  missionComplete Boolean?
+
+  @@index([accessTokenId, day])
+  @@index([accessTokenId, startedAt])
+  @@map("roleplay_sessions")
 }

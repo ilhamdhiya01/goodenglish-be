@@ -15,6 +15,8 @@ export const PROGRESS_KEY_WIRE = {
   practice_session: ProgressKey.PRACTICE_SESSION,
   flip: ProgressKey.FLIP,
   search_scope: ProgressKey.SEARCH_SCOPE,
+  roleplay: ProgressKey.ROLEPLAY,
+  mistakes: ProgressKey.MISTAKES,
 } as const satisfies Record<string, ProgressKey>;
 
 export type ProgressKeyWire = keyof typeof PROGRESS_KEY_WIRE;

@@ -17,6 +17,8 @@ export class TokenListItemDto {
   maxDevices!: number;
   // Tanya AI questions per day; null = unlimited.
   aiDailyLimit!: number | null;
+  // "Main peran" sessions per day; null = unlimited.
+  roleplayDailyLimit!: number | null;
   activeDevices!: number;
   status!: TokenStatus;
   expiresAt!: Date | null;

@@ -5,6 +5,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProgressModule } from './modules/progress/progress.module';
+import { RoleplayModule } from './modules/roleplay/roleplay.module';
 import { WordsModule } from './modules/words/words.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { WordsModule } from './modules/words/words.module';
     AdminModule,
     WordsModule,
     AiModule,
+    RoleplayModule,
   ],
   controllers: [],
   providers: [],

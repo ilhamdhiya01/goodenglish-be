@@ -14,5 +14,7 @@ import { AiService } from './ai.service';
     AiSettingsService,
     AiConversationsService,
   ],
+  // RoleplayModule uses the same Gemini key and model.
+  exports: [AiSettingsService],
 })
 export class AiModule {}

@@ -17,13 +17,21 @@ import {
 } from '../../common/token/access-enums';
 import { generateAccessToken } from '../../common/token/access-token.util';
 import { AccessToken, Prisma } from '../../generated/prisma/client';
-import { CreateTokenDto } from './dto/create-token.dto';
+import { roleplayWeeks, roleplayWeeksSince } from '../roleplay/roleplay-weeks';
+import {
+  CreateTokenDto,
+  ROLEPLAY_DAILY_LIMIT_DEFAULT,
+} from './dto/create-token.dto';
 import {
   CreatedTokenDto,
   TokenListItemDto,
   TokenStatus,
 } from './dto/token-list-item.dto';
-import { TokenSessionItemDto, TokenSummaryDto } from './dto/token-summary.dto';
+import {
+  RoleplayWeekDto,
+  TokenSessionItemDto,
+  TokenSummaryDto,
+} from './dto/token-summary.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
 
 type TokenWithActive = AccessToken & { activeDevices: number };
@@ -64,6 +72,10 @@ export class AdminTokensService {
           dto.aiDailyLimit === undefined
             ? (this.config.get<number>('ai.dailyLimit') ?? 30)
             : dto.aiDailyLimit,
+        roleplayDailyLimit:
+          dto.roleplayDailyLimit === undefined
+            ? ROLEPLAY_DAILY_LIMIT_DEFAULT
+            : dto.roleplayDailyLimit,
       },
     });
     return new CreatedTokenDto({
@@ -102,6 +114,9 @@ export class AdminTokensService {
       ...(dto.maxDevices !== undefined ? { maxDevices: dto.maxDevices } : {}),
       ...(dto.aiDailyLimit !== undefined
         ? { aiDailyLimit: dto.aiDailyLimit }
+        : {}),
+      ...(dto.roleplayDailyLimit !== undefined
+        ? { roleplayDailyLimit: dto.roleplayDailyLimit }
         : {}),
     };
     const token = await this.prisma.accessToken.update({ where: { id }, data });
@@ -178,18 +193,22 @@ export class AdminTokensService {
 
   async summary(id: string): Promise<TokenSummaryDto> {
     await this.findOrThrow(id);
-    const [docs, sessions] = await Promise.all([
+    const now = new Date();
+    const [docs, sessions, roleplay] = await Promise.all([
       this.prisma.progressDoc.findMany({ where: { accessTokenId: id } }),
       this.prisma.tokenSession.findMany({
         where: { accessTokenId: id },
         orderBy: { lastSeenAt: 'desc' },
         take: 20,
       }),
+      this.prisma.roleplaySession.findMany({
+        where: { accessTokenId: id, day: { gte: roleplayWeeksSince(now) } },
+        select: { day: true, durationSec: true },
+      }),
     ]);
     const byKey = new Map(docs.map((d) => [d.key, d.data]));
     const countKeys = (v: unknown) =>
       v && typeof v === 'object' ? Object.keys(v).length : 0;
-    const now = new Date();
 
     return new TokenSummaryDto({
       knownCount: countKeys(byKey.get('KNOWN')),
@@ -212,6 +231,9 @@ export class AdminTokensService {
             expiresAt: s.expiresAt,
           }),
       ),
+      roleplayWeeks: roleplayWeeks(roleplay, now).map(
+        (w) => new RoleplayWeekDto(w),
+      ),
     });
   }
 
@@ -223,8 +245,9 @@ export class AdminTokensService {
       menus: Object.keys(MENU_WIRE) as CreateTokenDto['menus'],
       levels: Object.keys(LEVEL_WIRE) as CreateTokenDto['levels'],
       maxDevices: 5,
-      // The owner's own token: no daily cap on Tanya AI.
+      // The owner's own token: no daily cap on Tanya AI or Main peran.
       aiDailyLimit: null,
+      roleplayDailyLimit: null,
     });
   }
 
@@ -242,8 +265,9 @@ export class AdminTokensService {
     levels: unknown[],
   ) {
     if (role === 'ADMIN') return;
-    // "ai" is the floating chat, not a page: a learner needs at least one tab.
-    if (!menus.some((m) => m !== 'ai')) {
+    // "ai" (the floating chat) and "roleplay" (a mode inside Skenario) are
+    // not pages: a learner needs at least one tab.
+    if (!menus.some((m) => m !== 'ai' && m !== 'roleplay')) {
       throw new UnprocessableEntityException({
         field: 'menus',
         message: 'menus_required',
@@ -321,6 +345,7 @@ export class AdminTokensService {
       levels: levelsToWire(t.levels),
       maxDevices: t.maxDevices,
       aiDailyLimit: t.aiDailyLimit,
+      roleplayDailyLimit: t.roleplayDailyLimit,
       activeDevices: t.activeDevices,
       status,
       expiresAt: t.expiresAt,

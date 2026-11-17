@@ -19,10 +19,14 @@ import {
   ROLE_WIRE_VALUES,
   type RoleWire,
 } from '../../../common/token/access-enums';
-import { AI_DAILY_LIMIT_MAX } from './create-token.dto';
+import {
+  AI_DAILY_LIMIT_MAX,
+  ROLEPLAY_DAILY_LIMIT_MAX,
+} from './create-token.dto';
 
 // Every field optional; `expiresAt: null` explicitly removes the expiry and
-// `aiDailyLimit: null` makes Tanya AI unlimited.
+// `aiDailyLimit: null` / `roleplayDailyLimit: null` make Tanya AI / Main
+// peran unlimited.
 export class UpdateTokenDto {
   @IsOptional()
   @IsString()
@@ -62,4 +66,12 @@ export class UpdateTokenDto {
   @Min(0)
   @Max(AI_DAILY_LIMIT_MAX)
   aiDailyLimit?: number | null;
+
+  // null = unlimited.
+  @IsOptional()
+  @ValidateIf((_o, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(ROLEPLAY_DAILY_LIMIT_MAX)
+  roleplayDailyLimit?: number | null;
 }

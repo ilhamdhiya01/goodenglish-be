@@ -96,6 +96,46 @@ describe('AdminTokensService', () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
+  it('gives new tokens 3 Main peran sessions a day unless one is chosen', async () => {
+    const base = {
+      label: 'X',
+      menus: ['scenario', 'roleplay'],
+      levels: ['pre'],
+      maxDevices: 1,
+    };
+    const a = setup();
+    await a.service.create(base as any);
+    expect(createdData(a.prisma).roleplayDailyLimit).toBe(3);
+
+    const b = setup();
+    await b.service.create({ ...base, roleplayDailyLimit: null } as any);
+    expect(createdData(b.prisma).roleplayDailyLimit).toBeNull();
+    expect(createdData(b.prisma).menus).toEqual(['SCENARIO', 'ROLEPLAY']);
+  });
+
+  it('changes the Main peran limit only when the update names it', async () => {
+    const { service, prisma } = setup(1);
+    await service.update('adm1', { roleplayDailyLimit: 0 });
+    await service.update('adm1', { label: 'Ilham' });
+    const [first, second] = prisma.accessToken.update.mock.calls.map(
+      (c) => c[0].data as Record<string, unknown>,
+    );
+    expect(first).toHaveProperty('roleplayDailyLimit', 0);
+    expect(second).not.toHaveProperty('roleplayDailyLimit');
+  });
+
+  it('refuses a learner token whose only menus are Tanya AI and Main peran', async () => {
+    const { service } = setup();
+    await expect(
+      service.create({
+        label: 'X',
+        menus: ['ai', 'roleplay'],
+        levels: ['pre'],
+        maxDevices: 1,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
   it('stores only the hash and returns the plaintext once', async () => {
     const { service, prisma } = setup();
     const res = await service.create({

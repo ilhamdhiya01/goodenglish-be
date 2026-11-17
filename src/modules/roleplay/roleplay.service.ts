@@ -1,0 +1,407 @@
+import {
+  BadGatewayException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { GoogleGenAI, ThinkingLevel, type Content } from '@google/genai';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import type { AccessContext } from '../../common/types/access-context';
+import { Menu } from '../../generated/prisma/enums';
+import type { RoleplaySession } from '../../generated/prisma/client';
+import { jakartaDay } from '../ai/ai-quota.service';
+import { AiSettingsService } from '../ai/ai-settings.service';
+import { createGemini } from '../ai/gemini.client';
+import { SttService, type UploadedAudio } from '../stt/stt.service';
+import {
+  FinishRoleplayDto,
+  MAX_HELP,
+  MAX_TRANSCRIBE,
+  MAX_USER_TURNS,
+  RoleplayContextDto,
+  RoleplayHelpDto,
+  RoleplayLineDto,
+  RoleplayStartedDto,
+  RoleplaySummaryDto,
+  RoleplayTranscriptionDto,
+  RoleplayTurnDto,
+  RoleplayUsageDto,
+  StartRoleplayDto,
+  TranscribeDto,
+  TranscriptDto,
+} from './dto/roleplay.dto';
+import { parseHelp, parseSummary, parseTurn } from './roleplay.parse';
+import {
+  HELP_SCHEMA,
+  helpInstruction,
+  OPENING_CUE,
+  SUMMARY_SCHEMA,
+  summaryInstruction,
+  transcriptText,
+  TURN_SCHEMA,
+  turnInstruction,
+} from './roleplay.prompts';
+
+// Turns are spoken back and forth: latency matters more than depth. The
+// summary is one call the learner waits for (target ≤ 10 s) but must judge
+// mistakes carefully, so it gets a little thinking.
+const TURN_THINKING = { thinkingLevel: ThinkingLevel.MINIMAL };
+const SUMMARY_THINKING = { thinkingLevel: ThinkingLevel.LOW };
+// No answer by then → 502, and the client offers "Coba lagi".
+const TURN_TIMEOUT_MS = 20_000;
+const SUMMARY_TIMEOUT_MS = 30_000;
+// Turns are refused after this; a full session takes ~10 minutes.
+export const SESSION_MAX_MS = 60 * 60 * 1000;
+// The summary can still be (re)fetched a while after the last turn.
+export const FINISH_MAX_MS = 2 * 60 * 60 * 1000;
+
+// Needs both the roleplay permission and the Skenario tab it lives in.
+export const assertRoleplay = (access: AccessContext): void => {
+  if (
+    !access.menus.includes(Menu.ROLEPLAY) ||
+    !access.menus.includes(Menu.SCENARIO)
+  ) {
+    throw new ForbiddenException({
+      field: '',
+      message: 'roleplay_not_allowed',
+    });
+  }
+};
+
+const fail = (message: string) =>
+  new UnprocessableEntityException({ field: '', message });
+
+// Transcript → Gemini contents. The opening cue stands in for the learner
+// walking up (Gemini wants the user first), and back-to-back lines of one
+// side (e.g. a retried turn) are merged so roles keep alternating.
+export const toContents = (lines: RoleplayLineDto[]): Content[] => {
+  const out: Content[] = [{ role: 'user', parts: [{ text: OPENING_CUE }] }];
+  for (const l of lines) {
+    const role = l.role === 'user' ? 'user' : 'model';
+    const last = out[out.length - 1];
+    if (last.role === role) last.parts!.push({ text: l.text });
+    else out.push({ role, parts: [{ text: l.text }] });
+  }
+  return out;
+};
+
+const userTurnsOf = (lines: RoleplayLineDto[]) =>
+  lines.filter((l) => l.role === 'user').length;
+
+@Injectable()
+export class RoleplayService {
+  private readonly logger = new Logger(RoleplayService.name);
+  // One client per key, like AiService.
+  private cached: { apiKey: string; client: GoogleGenAI } | null = null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: AiSettingsService,
+    private readonly stt: SttService,
+  ) {}
+
+  // Same Gemini key and model as Tanya AI (Admin › Tanya AI).
+  private async gemini(): Promise<{ client: GoogleGenAI; model: string }> {
+    const active = await this.settings.active();
+    if (!active) {
+      throw new ServiceUnavailableException({
+        field: '',
+        message: 'ai_unavailable',
+      });
+    }
+    if (this.cached?.apiKey !== active.apiKey) {
+      this.cached = {
+        apiKey: active.apiKey,
+        client: createGemini(active.apiKey),
+      };
+    }
+    return { client: this.cached.client, model: active.model };
+  }
+
+  private async generate(
+    systemInstruction: string,
+    contents: Content[],
+    schema: object,
+    opts: {
+      thinking: typeof TURN_THINKING;
+      timeoutMs: number;
+      max: number;
+      temperature?: number;
+    },
+  ): Promise<string | undefined> {
+    const { client, model } = await this.gemini();
+    const res = await client.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction,
+        maxOutputTokens: opts.max,
+        temperature: opts.temperature ?? 0.6,
+        thinkingConfig: opts.thinking,
+        responseMimeType: 'application/json',
+        responseJsonSchema: schema,
+        abortSignal: AbortSignal.timeout(opts.timeoutMs),
+      },
+    });
+    return res.text;
+  }
+
+  // Errors we raised ourselves (e.g. 503 no key) pass through; anything from
+  // Gemini or the parsers becomes 502 ai_failed.
+  private aiFailed(err: unknown): HttpException {
+    if (err instanceof HttpException) return err;
+    this.logger.error(err instanceof Error ? err.message : err);
+    return new BadGatewayException({ field: '', message: 'ai_failed' });
+  }
+
+  private todayCount(tokenId: string): Promise<number> {
+    return this.prisma.roleplaySession.count({
+      where: { accessTokenId: tokenId, day: jakartaDay() },
+    });
+  }
+
+  async usage(access: AccessContext): Promise<RoleplayUsageDto> {
+    assertRoleplay(access);
+    return new RoleplayUsageDto({
+      used: await this.todayCount(access.tokenId),
+      limit: access.roleplayDailyLimit,
+    });
+  }
+
+  // Takes one session off today's quota and gets the AI's opening line. The
+  // row is created first and counted after, so two starts at once can't both
+  // slip under the limit; if Gemini fails the row goes and the quota with it.
+  async start(
+    access: AccessContext,
+    dto: StartRoleplayDto,
+  ): Promise<RoleplayStartedDto> {
+    assertRoleplay(access);
+    await this.gemini(); // 503 before touching the quota
+    const limit = access.roleplayDailyLimit;
+    const session = await this.prisma.roleplaySession.create({
+      data: {
+        accessTokenId: access.tokenId,
+        day: jakartaDay(),
+        scenarioId: dto.scenarioId,
+        context: { ...dto.context },
+      },
+    });
+    const used = await this.todayCount(access.tokenId);
+    if (limit !== null && used > limit) {
+      await this.prisma.roleplaySession.delete({ where: { id: session.id } });
+      throw new HttpException(
+        { field: '', message: 'roleplay_quota_exceeded' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    try {
+      const raw = await this.generate(
+        turnInstruction(dto.context),
+        toContents([]),
+        TURN_SCHEMA,
+        { thinking: TURN_THINKING, timeoutMs: TURN_TIMEOUT_MS, max: 1024 },
+      );
+      const turn = parseTurn(raw, dto.context.steps.length, []);
+      return new RoleplayStartedDto({
+        id: session.id,
+        reply: turn.reply,
+        remaining: limit === null ? null : Math.max(0, limit - used),
+      });
+    } catch (err) {
+      await this.prisma.roleplaySession
+        .delete({ where: { id: session.id } })
+        .catch(() => undefined);
+      throw this.aiFailed(err);
+    }
+  }
+
+  private async owned(
+    access: AccessContext,
+    id: string,
+  ): Promise<RoleplaySession & { ctx: RoleplayContextDto }> {
+    assertRoleplay(access);
+    const s = await this.prisma.roleplaySession.findUnique({ where: { id } });
+    if (!s || s.accessTokenId !== access.tokenId) {
+      throw new NotFoundException({
+        field: 'id',
+        message: 'roleplay_session_not_found',
+      });
+    }
+    return { ...s, ctx: s.context as unknown as RoleplayContextDto };
+  }
+
+  private assertOpen(s: RoleplaySession) {
+    if (s.endedAt) {
+      throw new ConflictException({ field: '', message: 'roleplay_ended' });
+    }
+    if (Date.now() - s.startedAt.getTime() > SESSION_MAX_MS) {
+      throw fail('roleplay_session_expired');
+    }
+  }
+
+  // One learner turn. Nothing is saved unless Gemini answered, so a failed
+  // turn can simply be sent again with the same transcript.
+  async turn(
+    access: AccessContext,
+    id: string,
+    dto: TranscriptDto,
+  ): Promise<RoleplayTurnDto> {
+    const s = await this.owned(access, id);
+    this.assertOpen(s);
+    const last = dto.transcript[dto.transcript.length - 1];
+    if (last.role !== 'user') throw fail('roleplay_bad_turn');
+    const userTurns = userTurnsOf(dto.transcript);
+    if (userTurns > MAX_USER_TURNS) throw fail('roleplay_turn_limit');
+
+    let turn: ReturnType<typeof parseTurn>;
+    try {
+      const raw = await this.generate(
+        turnInstruction(s.ctx),
+        toContents(dto.transcript),
+        TURN_SCHEMA,
+        { thinking: TURN_THINKING, timeoutMs: TURN_TIMEOUT_MS, max: 1024 },
+      );
+      turn = parseTurn(raw, s.ctx.steps.length, s.stepsDone);
+    } catch (err) {
+      throw this.aiFailed(err);
+    }
+    await this.prisma.roleplaySession.update({
+      where: { id },
+      data: { stepsDone: turn.stepsDone, userTurns },
+    });
+    return new RoleplayTurnDto({
+      ...turn,
+      userTurns,
+      turnsLeft: MAX_USER_TURNS - userTurns,
+    });
+  }
+
+  // "Bantu aku": two short lines the learner could say next.
+  async help(
+    access: AccessContext,
+    id: string,
+    dto: TranscriptDto,
+  ): Promise<RoleplayHelpDto> {
+    const s = await this.owned(access, id);
+    this.assertOpen(s);
+    if (s.helpCount >= MAX_HELP) throw fail('roleplay_help_limit');
+    let suggestions: ReturnType<typeof parseHelp>;
+    try {
+      const raw = await this.generate(
+        helpInstruction(s.ctx),
+        [{ role: 'user', parts: [{ text: transcriptText(dto.transcript) }] }],
+        HELP_SCHEMA,
+        { thinking: TURN_THINKING, timeoutMs: TURN_TIMEOUT_MS, max: 512 },
+      );
+      suggestions = parseHelp(raw);
+    } catch (err) {
+      throw this.aiFailed(err);
+    }
+    await this.prisma.roleplaySession.update({
+      where: { id },
+      data: { helpCount: { increment: 1 } },
+    });
+    return new RoleplayHelpDto({
+      suggestions,
+      helpLeft: MAX_HELP - s.helpCount - 1,
+    });
+  }
+
+  // Writes down one spoken answer (the mic in Main peran) with the
+  // self-hosted faster-whisper service, verbatim: the learner's mistakes are
+  // kept for the end-of-session review. Not saved anywhere: the text goes
+  // back to the answer box, where the learner can still fix it.
+  async transcribe(
+    access: AccessContext,
+    id: string,
+    file: UploadedAudio | undefined,
+    dto: TranscribeDto,
+  ): Promise<RoleplayTranscriptionDto> {
+    const s = await this.owned(access, id);
+    this.assertOpen(s);
+    if (!file) {
+      throw new UnprocessableEntityException({
+        field: 'audio',
+        message: 'stt_no_speech',
+      });
+    }
+    if (s.transcribeCount >= MAX_TRANSCRIBE) {
+      throw fail('roleplay_transcribe_limit');
+    }
+    this.stt.assertRate(access.tokenId);
+    const result = await this.stt.transcribe(file, dto.language ?? 'en');
+    await this.prisma.roleplaySession.update({
+      where: { id },
+      data: { transcribeCount: { increment: 1 } },
+    });
+    return new RoleplayTranscriptionDto({
+      text: result.text,
+      language: result.language,
+      durationSec: result.durationSec,
+      transcribeLeft: MAX_TRANSCRIBE - s.transcribeCount - 1,
+    });
+  }
+
+  // The end-of-session review. May be called again (e.g. the first answer
+  // got lost on the way), so the learner never loses a finished session; the
+  // duration is capped by the time the server saw it first.
+  async finish(
+    access: AccessContext,
+    id: string,
+    dto: FinishRoleplayDto,
+  ): Promise<RoleplaySummaryDto> {
+    const s = await this.owned(access, id);
+    const now = new Date();
+    if (now.getTime() - s.startedAt.getTime() > FINISH_MAX_MS) {
+      throw fail('roleplay_session_expired');
+    }
+    const userTurns = userTurnsOf(dto.transcript);
+    if (!userTurns) throw fail('roleplay_no_turns');
+    if (userTurns > MAX_USER_TURNS) throw fail('roleplay_turn_limit');
+
+    let parsed: ReturnType<typeof parseSummary>;
+    try {
+      const raw = await this.generate(
+        summaryInstruction(s.ctx),
+        [{ role: 'user', parts: [{ text: transcriptText(dto.transcript) }] }],
+        SUMMARY_SCHEMA,
+        {
+          thinking: SUMMARY_THINKING,
+          timeoutMs: SUMMARY_TIMEOUT_MS,
+          max: 4096,
+        },
+      );
+      parsed = parseSummary(raw, s.ctx.phrases);
+    } catch (err) {
+      throw this.aiFailed(err);
+    }
+
+    const endedAt = s.endedAt ?? now;
+    const elapsed = Math.floor(
+      (endedAt.getTime() - s.startedAt.getTime()) / 1000,
+    );
+    const durationSec = Math.max(0, Math.min(dto.durationSec, elapsed));
+    const stepsComplete = s.stepsDone.length >= s.ctx.steps.length;
+    const missionComplete = stepsComplete || parsed.missionComplete;
+    const stepsDone = missionComplete
+      ? s.ctx.steps.map((_, i) => i)
+      : s.stepsDone;
+    await this.prisma.roleplaySession.update({
+      where: { id },
+      data: { endedAt, durationSec, missionComplete, userTurns, stepsDone },
+    });
+    return new RoleplaySummaryDto({
+      ...parsed,
+      missionComplete,
+      durationSec,
+      userTurns,
+      stepsDone,
+    });
+  }
+}

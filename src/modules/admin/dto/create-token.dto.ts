@@ -22,6 +22,9 @@ import {
 
 // Upper bound for a finite per-token AI limit (null means unlimited).
 export const AI_DAILY_LIMIT_MAX = 10000;
+// Same for "Main peran" sessions per day.
+export const ROLEPLAY_DAILY_LIMIT_MAX = 100;
+export const ROLEPLAY_DAILY_LIMIT_DEFAULT = 3;
 
 export class CreateTokenDto {
   @IsString()
@@ -57,4 +60,12 @@ export class CreateTokenDto {
   @Min(0)
   @Max(AI_DAILY_LIMIT_MAX)
   aiDailyLimit?: number | null;
+
+  // "Main peran" sessions per day. null = unlimited; omitted = 3.
+  @IsOptional()
+  @ValidateIf((_o, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(ROLEPLAY_DAILY_LIMIT_MAX)
+  roleplayDailyLimit?: number | null;
 }

@@ -20,4 +20,6 @@ export interface AccessContext {
   expiresAt: Date | null;
   // "Tanya AI" questions per day; null = unlimited.
   aiDailyLimit: number | null;
+  // "Main peran" sessions per day; null = unlimited.
+  roleplayDailyLimit: number | null;
 }

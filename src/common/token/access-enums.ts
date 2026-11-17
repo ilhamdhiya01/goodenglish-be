@@ -14,6 +14,7 @@ export const MENU_WIRE = {
   pronunciation: Menu.PRONUNCIATION,
   cheatsheet: Menu.CHEATSHEET,
   ai: Menu.AI,
+  roleplay: Menu.ROLEPLAY,
 } as const satisfies Record<string, Menu>;
 
 export const LEVEL_WIRE = {
