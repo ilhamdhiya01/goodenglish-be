@@ -1,0 +1,17 @@
+[
+ {"file": "en_short_1.webm", "language": "en", "kind": "short", "expected": "Yes, please.", "must_keep": ["yes please"]},
+ {"file": "en_short_2.m4a", "language": "en", "kind": "grammar", "expected": "Two coffee.", "must_keep": ["two coffee"]},
+ {"file": "en_grammar_1.webm", "language": "en", "kind": "grammar", "expected": "I go to event yesterday.", "must_keep": ["go to event yesterday"]},
+ {"file": "en_grammar_2.m4a", "language": "en", "kind": "grammar", "expected": "Yesterday I am meet my friend.", "must_keep": ["am meet"]},
+ {"file": "en_grammar_3.ogg", "language": "en", "kind": "grammar", "expected": "She is work in Jakarta since two years.", "must_keep": ["is work", "since two years"]},
+ {"file": "en_grammar_4.webm", "language": "en", "kind": "grammar", "expected": "He don't like coffee.", "must_keep": ["he dont like"]},
+ {"file": "en_grammar_5.m4a", "language": "en", "kind": "grammar", "expected": "I want buy two latte. How much it is?", "must_keep": ["want buy", "two latte", "how much it is"]},
+ {"file": "en_long_1.webm", "language": "en", "kind": "long", "expected": "Hi, my name is Rani. I am from Jakarta and I work as a developer in a small startup. I have been living here for three years and I really like the food.", "must_keep": ["my name is rani", "from jakarta"]},
+ {"file": "en_long_grammar.m4a", "language": "en", "kind": "grammar", "expected": "Last week I go to Bali with my family. We stay in hotel near the beach, and the weather is very hot, but we very happy.", "must_keep": ["i go to bali", "stay in hotel", "we very happy"]},
+ {"file": "id_short.webm", "language": "id", "kind": "short", "expected": "Iya, boleh.", "must_keep": ["boleh"]},
+ {"file": "id_long.m4a", "language": "id", "kind": "long", "expected": "Aku kerja di Jakarta sudah dua tahun, biasanya aku naik kereta ke kantor.", "must_keep": ["kerja di jakarta", "naik kereta"]},
+ {"file": "id_order.wav", "language": "id", "kind": "short", "expected": "Saya mau pesan dua kopi susu ya.", "must_keep": ["pesan dua kopi"]},
+ {"file": "silence_5s.webm", "language": "en", "kind": "silence", "expected": ""},
+ {"file": "noise_5s.m4a", "language": "en", "kind": "noise", "expected": ""},
+ {"file": "en_noisy.webm", "language": "en", "kind": "noise-speech", "expected": "I go to event yesterday with my friend.", "must_keep": ["go to event yesterday"]}
+]

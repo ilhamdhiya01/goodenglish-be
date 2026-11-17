@@ -89,6 +89,49 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # The speech-to-text service (stt/), same tags as the app image
+  # (`dev` / `latest` + sha), pulled by docker-compose.yml's `stt` service.
+  build-and-push-stt:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (stt image)
+        id: meta-stt
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/goodenglish-stt
+          tags: |
+            type=raw,value=dev,enable=${{ github.ref_name != 'main' }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=sha,format=long,enable=${{ github.ref_name == 'main' }}
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push stt image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./stt
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-stt.outputs.tags }}
+          labels: ${{ steps.meta-stt.outputs.labels }}
+          cache-from: type=gha,scope=stt
+          cache-to: type=gha,mode=max,scope=stt
+
   # Runs only after both images are pushed. SSHes into the VPS and pulls the
   # tag matching this branch (`dev` for development, `latest` for main), then
   # recreates the stack. `up -d` re-runs the one-off `migrate` job because
@@ -97,7 +140,7 @@ jobs:
   # Secrets and variables → Actions).
   deploy:
     name: Deploy to VPS
-    needs: build-and-push
+    needs: [build-and-push, build-and-push-stt]
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
     steps:

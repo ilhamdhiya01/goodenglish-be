@@ -14,3 +14,10 @@ services:
   app:
     env_file:
       - .env.compose
+  # Built from stt/ locally (no GHCR pull needed) and published on
+  # 127.0.0.1:8100 so `pnpm start:dev` can use STT_URL=http://127.0.0.1:8100.
+  stt:
+    build: ./stt
+    image: goodenglish-stt:local
+    ports:
+      - '127.0.0.1:8100:8000'

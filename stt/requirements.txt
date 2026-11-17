@@ -1,0 +1,8 @@
+# Pinned. faster-whisper 1.2.1 passes `metadata_errors` to av.open(), which
+# PyAV 19 no longer accepts; 15–18 work (verified on the test clips).
+faster-whisper==1.2.1
+av==18.1.0
+ctranslate2==4.9.0
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+python-multipart==0.0.34

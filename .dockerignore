@@ -18,3 +18,6 @@ src/generated/prisma
 Dockerfile*
 .dockerignore
 docker-compose*.yml
+
+# Python speech-to-text service: its own image (stt/Dockerfile).
+stt/

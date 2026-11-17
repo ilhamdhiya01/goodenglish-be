@@ -23,4 +23,9 @@ export const validationSchema = Joi.object({
   ENCRYPTION_KEY: Joi.string().hex().length(64).allow('').default(''),
   // Default questions/day for new tokens; set per token in the admin form.
   AI_DAILY_LIMIT: Joi.number().integer().min(0).default(30),
+  // Speech-to-text service for the Main peran mic (stt/ container), e.g.
+  // http://stt:8000. Optional: without it only typing works.
+  STT_URL: Joi.string().uri().allow('').default(''),
+  STT_RATE_PER_MIN: Joi.number().integer().min(1).default(12),
+  STT_TIMEOUT_MS: Joi.number().integer().min(1000).default(45000),
 });

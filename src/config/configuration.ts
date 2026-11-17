@@ -24,4 +24,13 @@ export default () => ({
     // AccessToken.aiDailyLimit (null = unlimited).
     dailyLimit: Number(process.env.AI_DAILY_LIMIT ?? 30),
   },
+  stt: {
+    // The faster-whisper container (stt/), reached over the Compose network.
+    // Empty = the mic in Main peran answers 503 stt_unavailable.
+    url: (process.env.STT_URL ?? '').replace(/\/+$/, ''),
+    // Recordings per token per minute, across all sessions.
+    ratePerMin: Number(process.env.STT_RATE_PER_MIN ?? 12),
+    // A 60 s answer on 2 vCPU can take a while; beyond this → 504.
+    timeoutMs: Number(process.env.STT_TIMEOUT_MS ?? 45000),
+  },
 });

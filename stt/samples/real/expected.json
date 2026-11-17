@@ -1,0 +1,138 @@
+[
+ {
+  "file": "r01_short_en.m4a",
+  "language": "en",
+  "kind": "short",
+  "expected": "Yes, please.",
+  "must_keep": [
+   "yes please"
+  ]
+ },
+ {
+  "file": "r02_short_en.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "Two coffee.",
+  "must_keep": [
+   "two coffee"
+  ]
+ },
+ {
+  "file": "r03_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "I go to event yesterday.",
+  "must_keep": [
+   "go to event yesterday"
+  ]
+ },
+ {
+  "file": "r04_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "Yesterday I am meet my friend.",
+  "must_keep": [
+   "am meet"
+  ]
+ },
+ {
+  "file": "r05_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "She is work in Jakarta since two years.",
+  "must_keep": [
+   "is work",
+   "since two years"
+  ]
+ },
+ {
+  "file": "r06_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "He don't like coffee.",
+  "must_keep": [
+   "he dont like"
+  ]
+ },
+ {
+  "file": "r07_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "I want buy two latte. How much it is?",
+  "must_keep": [
+   "want buy",
+   "two latte",
+   "how much it is"
+  ]
+ },
+ {
+  "file": "r08_long_en.m4a",
+  "language": "en",
+  "kind": "long",
+  "expected": "Hi, my name is Rani. I am from Jakarta and I work as a developer in a small startup. I have been living here for three years and I really like the food.",
+  "must_keep": [
+   "my name is rani",
+   "from jakarta"
+  ]
+ },
+ {
+  "file": "r09_long_grammar.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "Last week I go to Bali with my family. We stay in hotel near the beach, and the weather is very hot, but we very happy.",
+  "must_keep": [
+   "i go to bali",
+   "stay in hotel",
+   "we very happy"
+  ]
+ },
+ {
+  "file": "r10_hesitant.m4a",
+  "language": "en",
+  "kind": "grammar",
+  "expected": "Umm... I am... I am work as, uh, teacher.",
+  "must_keep": [
+   "am work as"
+  ]
+ },
+ {
+  "file": "r11_short_id.m4a",
+  "language": "id",
+  "kind": "short",
+  "expected": "Iya, boleh.",
+  "must_keep": [
+   "boleh"
+  ]
+ },
+ {
+  "file": "r12_long_id.m4a",
+  "language": "id",
+  "kind": "long",
+  "expected": "Aku kerja di Jakarta sudah dua tahun, biasanya aku naik kereta ke kantor.",
+  "must_keep": [
+   "kerja di jakarta",
+   "naik kereta"
+  ]
+ },
+ {
+  "file": "r13_silence.m4a",
+  "language": "en",
+  "kind": "silence",
+  "expected": ""
+ },
+ {
+  "file": "r14_noise.m4a",
+  "language": "en",
+  "kind": "noise",
+  "expected": ""
+ },
+ {
+  "file": "r15_noisy_speech.m4a",
+  "language": "en",
+  "kind": "noise-speech",
+  "expected": "I go to event yesterday with my friend.",
+  "must_keep": [
+   "go to event yesterday"
+  ]
+ }
+]

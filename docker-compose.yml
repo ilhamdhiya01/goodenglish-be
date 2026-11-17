@@ -38,6 +38,9 @@ services:
         condition: service_completed_successfully
     env_file:
       - .env
+    environment:
+      # The speech-to-text service below, over the Compose network.
+      STT_URL: ${STT_URL:-http://stt:8000}
     ports:
       # Host side only, for nginx (goodenglish.my.id /api/v1 → 3201). The app
       # still listens on 3001 inside its container.
@@ -54,5 +57,35 @@ services:
       timeout: 5s
       retries: 5
 
+  # Speech-to-text for the Main peran mic (stt/): faster-whisper on CPU.
+  # Internal only (no ports): just `app` calls it. The model is downloaded
+  # into `stt_models` on first start (~0.5 GB for `small`) and loaded once.
+  # Sized for the 2 vCPU / 4 GB VPS; see stt/README.md to change the model.
+  stt:
+    image: ghcr.io/${GHCR_OWNER}/goodenglish-stt:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      STT_MODEL: ${STT_MODEL:-small}
+      STT_DEVICE: ${STT_DEVICE:-cpu}
+      STT_COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
+      STT_CPU_THREADS: ${STT_CPU_THREADS:-2}
+      STT_BEAM_SIZE: ${STT_BEAM_SIZE:-5}
+      STT_CONCURRENCY: ${STT_CONCURRENCY:-1}
+      STT_QUEUE_MAX: ${STT_QUEUE_MAX:-4}
+      LOG_LEVEL: ${STT_LOG_LEVEL:-INFO}
+    volumes:
+      - stt_models:/models
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1536M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
 volumes:
   db_data:
+  stt_models:
