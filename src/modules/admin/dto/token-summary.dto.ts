@@ -29,6 +29,10 @@ export class TokenSummaryDto {
   srsCount!: number;
   ownSentenceCount!: number;
   customWordCount!: number;
+  // Of customWordCount: personal cards saved from Bacaan.
+  personalWordCount!: number;
+  // Bacaan texts finished (quiz answered).
+  readingDoneCount!: number;
   lastProgressAt!: Date | null;
   sessions!: TokenSessionItemDto[];
   // Last ROLEPLAY_WEEKS weeks, newest first, including empty ones.

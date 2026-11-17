@@ -223,6 +223,36 @@ describe('AdminTokensService', () => {
     expect(res.item).toMatchObject({ id: 'adm1', activeDevices: 0 });
   });
 
+  it('summary counts personal cards and finished Bacaan texts', async () => {
+    const { service, prisma } = setup();
+    const at = new Date('2026-11-17T00:00:00Z');
+    Object.assign(prisma, {
+      progressDoc: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            key: 'CUSTOM',
+            updatedAt: at,
+            data: [
+              { key: 'c1' },
+              { key: 'c2', personal: true, source: 'Bacaan: X' },
+            ],
+          },
+          { key: 'READING', updatedAt: at, data: { done: { t1: 1, t2: 2 } } },
+        ]),
+      },
+      roleplaySession: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    (prisma.tokenSession as Record<string, unknown>).findMany = jest
+      .fn()
+      .mockResolvedValue([]);
+    const res = await service.summary('adm1');
+    expect(res).toMatchObject({
+      customWordCount: 2,
+      personalWordCount: 1,
+      readingDoneCount: 2,
+    });
+  });
+
   it('404s on an unknown token', async () => {
     const { service, prisma } = setup();
     prisma.accessToken.findUnique.mockResolvedValue(null);

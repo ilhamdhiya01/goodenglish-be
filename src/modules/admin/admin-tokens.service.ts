@@ -209,14 +209,24 @@ export class AdminTokensService {
     const byKey = new Map(docs.map((d) => [d.key, d.data]));
     const countKeys = (v: unknown) =>
       v && typeof v === 'object' ? Object.keys(v).length : 0;
+    const customDoc = byKey.get('CUSTOM');
+    const custom: unknown[] = Array.isArray(customDoc) ? customDoc : [];
 
     return new TokenSummaryDto({
       knownCount: countKeys(byKey.get('KNOWN')),
       srsCount: countKeys(byKey.get('SRS')),
       ownSentenceCount: countKeys(byKey.get('OWN')),
-      customWordCount: Array.isArray(byKey.get('CUSTOM'))
-        ? (byKey.get('CUSTOM') as unknown[]).length
-        : 0,
+      customWordCount: custom.length,
+      // Cards saved while reading (Bacaan › Simpan ke Ulang).
+      personalWordCount: custom.filter(
+        (c) =>
+          c &&
+          typeof c === 'object' &&
+          (c as { personal?: unknown }).personal === true,
+      ).length,
+      readingDoneCount: countKeys(
+        (byKey.get('READING') as { done?: unknown } | undefined)?.done,
+      ),
       lastProgressAt: docs.length
         ? new Date(Math.max(...docs.map((d) => d.updatedAt.getTime())))
         : null,
