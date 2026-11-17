@@ -29,7 +29,7 @@ export const ROLEPLAY_CATEGORY_IDS = Object.keys(
 // Used when the model returns something outside the list.
 export const FALLBACK_CATEGORY: RoleplayCategory = 'kesalahan';
 
-const LEVEL_TEXT: Record<LevelWire, string> = {
+export const LEVEL_TEXT: Record<LevelWire, string> = {
   beginner:
     'beginner (A1–A2): very common everyday words, short simple sentences, present tense where possible',
   pre: 'pre-intermediate (A2–B1): common words, simple sentences, everyday phrasal verbs',

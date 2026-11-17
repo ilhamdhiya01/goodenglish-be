@@ -31,6 +31,8 @@ enum Menu {
   // Not a tab either: "Main peran" (voice roleplay with the AI) inside
   // Skenario. Needs SCENARIO too.
   ROLEPLAY
+  // "Menyimak": listening practice (dictation, listen & answer, minimal pairs).
+  LISTENING
 }
 
 enum Level {
@@ -61,6 +63,8 @@ enum ProgressKey {
   // end-of-session summaries) and the mistakes collected from them.
   ROLEPLAY
   MISTAKES
+  // Added with "Menyimak": set results, unlocked stages, seen items, pair stats.
+  LISTENING
 }
 
 // An access token IS the learner's identity: there are no user accounts.
@@ -243,4 +247,41 @@ model RoleplaySession {
   @@index([accessTokenId, day])
   @@index([accessTokenId, startedAt])
   @@map("roleplay_sessions")
+}
+
+enum ListeningStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ListeningType {
+  DIALOG
+  MONOLOG
+}
+
+// "Menyimak › Dengar & jawab": a 40–120 word dialogue or announcement with
+// 3 multiple-choice questions. Generated once with Gemini by an admin
+// (Admin › Kelola › Menyimak), checked and edited as a DRAFT, then
+// PUBLISHED. Learners only ever read published items, so nothing is
+// generated again per learner.
+model ListeningItem {
+  id          String          @id @default(cuid())
+  level       Level
+  week        Int
+  status      ListeningStatus @default(DRAFT)
+  type        ListeningType
+  title       String          @db.VarChar(160)
+  // [{ speaker: "A" | "B", text }]
+  lines       Json
+  // [{ question, options: string[4], answerIndex, explanationId }]
+  questions   Json
+  wordCount   Int
+  // Label of the admin token that generated or last saved it.
+  createdBy   String?         @db.VarChar(100)
+  publishedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([level, week, status])
+  @@map("listening_items")
 }

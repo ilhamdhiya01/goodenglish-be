@@ -4,6 +4,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { ListeningModule } from './modules/listening/listening.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { RoleplayModule } from './modules/roleplay/roleplay.module';
 import { WordsModule } from './modules/words/words.module';
@@ -18,6 +19,7 @@ import { WordsModule } from './modules/words/words.module';
     WordsModule,
     AiModule,
     RoleplayModule,
+    ListeningModule,
   ],
   controllers: [],
   providers: [],
