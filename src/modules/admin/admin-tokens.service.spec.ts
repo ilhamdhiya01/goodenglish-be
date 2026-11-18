@@ -2,7 +2,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AdminTokensService } from './admin-tokens.service';
+import { AdminTokensService, mistakeStats } from './admin-tokens.service';
 
 // ESM-only / DB-bound modules are mocked out, same as critiq's specs:
 // the class under test is constructed directly with hand-made fakes.
@@ -251,6 +251,46 @@ describe('AdminTokensService', () => {
       personalWordCount: 1,
       readingDoneCount: 2,
     });
+  });
+
+  it('summary counts mistakes in the old array and the v2 doc', () => {
+    // Old array: no status, the same pair twice counts once.
+    expect(
+      mistakeStats([
+        { wrong: 'She go.', correct: 'She goes.', category: 'tense' },
+        { wrong: 'she go', correct: 'She goes!', category: 'tense' },
+        { wrong: 'I am agree', correct: 'I agree', category: 'am-is-are' },
+      ]),
+    ).toMatchObject({
+      active: 2,
+      mastered: 0,
+      top: [
+        { id: 'am-is-are', count: 1 },
+        { id: 'tense', count: 1 },
+      ],
+    });
+    const v2 = {
+      v: 2,
+      items: [
+        { key: 'a', status: 'active', category: 'tense' },
+        { key: 'b', status: 'active', category: 'tense' },
+        { key: 'c', status: 'active', category: 'a-an-the' },
+        { key: 'd', status: 'mastered', category: 'pasif' },
+        { key: 'e', status: 'archived', category: 'waktu' },
+        { key: 'f', status: 'active', category: 'waktu' },
+        { key: 'g', status: 'active', category: 'urutan-kata' },
+      ],
+    };
+    expect(mistakeStats(v2)).toMatchObject({
+      active: 5,
+      mastered: 1,
+      top: [
+        { id: 'tense', count: 2 },
+        { id: 'a-an-the', count: 1 },
+        { id: 'urutan-kata', count: 1 },
+      ],
+    });
+    expect(mistakeStats(undefined)).toMatchObject({ active: 0, top: [] });
   });
 
   it('404s on an unknown token', async () => {

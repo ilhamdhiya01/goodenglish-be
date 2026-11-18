@@ -8,6 +8,7 @@ import { ListeningModule } from './modules/listening/listening.module';
 import { ReadingModule } from './modules/reading/reading.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { RoleplayModule } from './modules/roleplay/roleplay.module';
+import { SttModule } from './modules/stt/stt.module';
 import { WordsModule } from './modules/words/words.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { WordsModule } from './modules/words/words.module';
     RoleplayModule,
     ListeningModule,
     ReadingModule,
+    SttModule,
   ],
   controllers: [],
   providers: [],

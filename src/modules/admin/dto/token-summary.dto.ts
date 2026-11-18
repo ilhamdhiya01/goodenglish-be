@@ -23,6 +23,16 @@ export class RoleplayWeekDto {
   }
 }
 
+// One "Buku kesalahanku" category and how many active mistakes it holds.
+export class MistakeCategoryCountDto {
+  id!: string;
+  count!: number;
+
+  constructor(partial: Partial<MistakeCategoryCountDto>) {
+    Object.assign(this, partial);
+  }
+}
+
 // Learning-progress overview for one token, derived from its progress docs.
 export class TokenSummaryDto {
   knownCount!: number;
@@ -33,6 +43,10 @@ export class TokenSummaryDto {
   personalWordCount!: number;
   // Bacaan texts finished (quiz answered).
   readingDoneCount!: number;
+  // "Buku kesalahanku": active and mastered mistakes, top 3 categories.
+  mistakeActiveCount!: number;
+  mistakeMasteredCount!: number;
+  topMistakeCategories!: MistakeCategoryCountDto[];
   lastProgressAt!: Date | null;
   sessions!: TokenSessionItemDto[];
   // Last ROLEPLAY_WEEKS weeks, newest first, including empty ones.

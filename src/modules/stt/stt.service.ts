@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   GatewayTimeoutException,
   HttpException,
   HttpStatus,
@@ -7,6 +8,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { AccessContext } from '../../common/types/access-context';
+import { Menu } from '../../generated/prisma/enums';
 
 export const STT_LANGUAGES = ['en', 'id'] as const;
 export type SttLanguage = (typeof STT_LANGUAGES)[number];
@@ -91,6 +94,26 @@ export class SttService {
     this.limiter = new SttRateLimiter(
       config.get<number>('stt.ratePerMin') ?? 12,
     );
+  }
+
+  /**
+   * "Betulkan kalimat" in Ulang: needs the review menu, then the same rate
+   * limit and caps as Main peran.
+   */
+  async transcribeForReview(
+    access: AccessContext,
+    file: UploadedAudio | undefined,
+    language: SttLanguage = 'en',
+  ): Promise<SttResult> {
+    if (!access.menus.includes(Menu.REVIEW)) {
+      throw new ForbiddenException({
+        field: '',
+        message: 'review_not_allowed',
+      });
+    }
+    if (!file) throw fail(HttpStatus.UNPROCESSABLE_ENTITY, 'stt_no_speech');
+    this.assertRate(access.tokenId);
+    return this.transcribe(file, language);
   }
 
   /** 429 when this token recorded too much in the last minute. */
