@@ -372,6 +372,74 @@ describe('AdminTokensService', () => {
     ).toMatchObject({ status: 'skipped', level: null });
   });
 
+  it("returns one token's raw progress docs by wire key", async () => {
+    const { service, prisma } = setup();
+    Object.assign(prisma, {
+      progressDoc: {
+        findMany: jest.fn().mockResolvedValue([
+          { key: 'KNOWN', data: { '1:w:be': 1 } },
+          { key: 'ACTIVITY', data: { v: 1 } },
+        ]),
+      },
+    });
+    await expect(service.progress('adm1')).resolves.toEqual({
+      known: { '1:w:be': 1 },
+      activity: { v: 1 },
+    });
+  });
+
+  it('lists learners with activity, streak and retention', async () => {
+    const { service, prisma } = setup();
+    const now = new Date(Date.UTC(2026, 10, 18, 12));
+    const today = Math.floor(now.getTime() / 86400000);
+    Object.assign(prisma.accessToken, {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          ...admin,
+          id: 'l1',
+          label: 'Rina',
+          role: 'LEARNER',
+          lastUsedAt: null,
+        },
+        {
+          ...admin,
+          id: 'l2',
+          label: 'Budi',
+          role: 'LEARNER',
+          lastUsedAt: new Date(Date.UTC(2026, 10, 10)),
+        },
+      ]),
+    });
+    Object.assign(prisma, {
+      progressDoc: {
+        findMany: jest.fn().mockResolvedValue([
+          { accessTokenId: 'l1', key: 'LEVEL', data: 'pre' },
+          {
+            accessTokenId: 'l1',
+            key: 'ACTIVITY',
+            data: {
+              days: { [today]: { m: { vocab: 300 }, r: 4, g: 3, l: 2 } },
+            },
+          },
+        ]),
+      },
+    });
+    const rows = await service.learnersOverview(now);
+    expect(rows[0]).toMatchObject({
+      id: 'l1',
+      level: 'pre',
+      minutes7d: 5,
+      wordsThisWeek: 2,
+      retention: 75,
+      streak: 0,
+    });
+    expect(rows[0].lastActiveAt!.getTime()).toBeGreaterThan(
+      now.getTime() - 86400000,
+    );
+    expect(rows[1]).toMatchObject({ id: 'l2', level: null, retention: null });
+    expect(rows[1].lastActiveAt).toEqual(new Date(Date.UTC(2026, 10, 10)));
+  });
+
   it('404s on an unknown token', async () => {
     const { service, prisma } = setup();
     prisma.accessToken.findUnique.mockResolvedValue(null);

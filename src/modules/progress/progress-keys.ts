@@ -20,6 +20,7 @@ export const PROGRESS_KEY_WIRE = {
   listening: ProgressKey.LISTENING,
   reading: ProgressKey.READING,
   exam: ProgressKey.EXAM,
+  activity: ProgressKey.ACTIVITY,
 } as const satisfies Record<string, ProgressKey>;
 
 export type ProgressKeyWire = keyof typeof PROGRESS_KEY_WIRE;
@@ -29,3 +30,6 @@ export const PROGRESS_KEY_WIRE_VALUES = Object.keys(
 
 export const progressKeyToWire = (key: ProgressKey): ProgressKeyWire =>
   PROGRESS_KEY_WIRE_VALUES.find((w) => PROGRESS_KEY_WIRE[w] === key)!;
+
+/** Every progress doc of one token, by wire key (GET /me/progress). */
+export type ProgressMap = Partial<Record<ProgressKeyWire, unknown>>;
