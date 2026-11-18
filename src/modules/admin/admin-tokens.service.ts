@@ -17,6 +17,7 @@ import {
 } from '../../common/token/access-enums';
 import { generateAccessToken } from '../../common/token/access-token.util';
 import { AccessToken, Prisma } from '../../generated/prisma/client';
+import { progressKeyToWire, type ProgressMap } from '../progress/progress-keys';
 import { roleplayWeeks, roleplayWeeksSince } from '../roleplay/roleplay-weeks';
 import {
   CreateTokenDto,
@@ -36,7 +37,9 @@ import {
   MistakeCategoryCountDto,
   PlacementResultDto,
 } from './dto/token-summary.dto';
+import { LearnerOverviewDto } from './dto/learner-overview.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
+import { learnerRow, todayDay } from './learner-overview';
 
 type TokenWithActive = AccessToken & { activeDevices: number };
 
@@ -366,6 +369,75 @@ export class AdminTokensService {
       roleplayWeeks: roleplayWeeks(roleplay, now).map(
         (w) => new RoleplayWeekDto(w),
       ),
+    });
+  }
+
+  /** One learner's raw progress docs (the app's Progres page, read-only). */
+  async progress(id: string): Promise<ProgressMap> {
+    await this.findOrThrow(id);
+    const docs = await this.prisma.progressDoc.findMany({
+      where: { accessTokenId: id },
+      select: { key: true, data: true },
+    });
+    const out: ProgressMap = {};
+    for (const d of docs) out[progressKeyToWire(d.key)] = d.data;
+    return out;
+  }
+
+  /**
+   * "Ringkasan pelajar": every learner token with activity, streak and
+   * retention. Reads only the small ACTIVITY, PLAN and LEVEL docs.
+   */
+  async learnersOverview(now = new Date()): Promise<LearnerOverviewDto[]> {
+    const [tokens, docs] = await Promise.all([
+      this.prisma.accessToken.findMany({
+        where: { role: 'LEARNER' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.progressDoc.findMany({
+        where: {
+          key: { in: ['ACTIVITY', 'PLAN', 'LEVEL'] },
+          accessToken: { role: 'LEARNER' },
+        },
+        select: { accessTokenId: true, key: true, data: true },
+      }),
+    ]);
+    const byToken = new Map<string, Record<string, unknown>>();
+    for (const d of docs) {
+      const m = byToken.get(d.accessTokenId) ?? {};
+      m[d.key] = d.data;
+      byToken.set(d.accessTokenId, m);
+    }
+    const today = todayDay(now.getTime());
+    return tokens.map((t) => {
+      const row = learnerRow(byToken.get(t.id) ?? {}, today);
+      const activity =
+        row.lastActivityDay === null
+          ? null
+          : new Date(
+              Math.min(
+                (row.lastActivityDay + 1) * 86_400_000 - 1,
+                now.getTime(),
+              ),
+            );
+      const lastActiveAt =
+        [t.lastUsedAt, activity]
+          .filter((x): x is Date => !!x)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+      return new LearnerOverviewDto({
+        id: t.id,
+        label: t.label,
+        status: this.toItem({ ...t, activeDevices: 0 }).status,
+        levels: levelsToWire(t.levels),
+        menus: menusToWire(t.menus),
+        level: row.level,
+        lastActiveAt,
+        streak: row.streak,
+        minutes7d: row.minutes7d,
+        wordsThisWeek: row.wordsThisWeek,
+        retention: row.retention,
+        reviews28d: row.reviews28d,
+      });
     });
   }
 

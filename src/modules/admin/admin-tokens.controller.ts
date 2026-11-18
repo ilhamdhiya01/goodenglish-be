@@ -14,6 +14,7 @@ import { ResponseMessage } from '../../common/decorators/response-message.decora
 import { AdminTokensService } from './admin-tokens.service';
 import { CreateTokenDto } from './dto/create-token.dto';
 import { CreatedTokenDto, TokenListItemDto } from './dto/token-list-item.dto';
+import type { ProgressMap } from '../progress/progress-keys';
 import { TokenSummaryDto } from './dto/token-summary.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
 
@@ -75,6 +76,13 @@ export class AdminTokensController {
   async remove(@Param('id') id: string): Promise<null> {
     await this.tokensService.remove(id);
     return null;
+  }
+
+  // The learner's raw progress docs, for the Progres page in read-only mode.
+  @Get(':id/progress')
+  @ResponseMessage('Token progress retrieved successfully')
+  progress(@Param('id') id: string): Promise<ProgressMap> {
+    return this.tokensService.progress(id);
   }
 
   @Get(':id/summary')

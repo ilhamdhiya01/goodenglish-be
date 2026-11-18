@@ -5,9 +5,10 @@ import {
   PROGRESS_KEY_WIRE,
   progressKeyToWire,
   ProgressKeyWire,
+  type ProgressMap,
 } from './progress-keys';
 
-export type ProgressMap = Partial<Record<ProgressKeyWire, unknown>>;
+export type { ProgressMap };
 
 @Injectable()
 export class ProgressService {

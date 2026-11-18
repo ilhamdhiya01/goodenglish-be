@@ -35,6 +35,8 @@ enum Menu {
   LISTENING
   // "Bacaan": graded reading texts with tap-a-word and questions.
   READING
+  // "Progres": the learner's own progress charts.
+  PROGRESS
 }
 
 enum Level {
@@ -71,6 +73,9 @@ enum ProgressKey {
   READING
   // Added with the placement test and end-of-level exams.
   EXAM
+  // Added with "Progres": daily minutes per menu, reviews, words learned,
+  // and a short list of finished sessions.
+  ACTIVITY
 }
 
 // An access token IS the learner's identity: there are no user accounts.
