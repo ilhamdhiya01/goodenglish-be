@@ -103,6 +103,7 @@ export class TokenSessionGuard implements CanActivate {
       expiresAt: token.expiresAt,
       aiDailyLimit: token.aiDailyLimit,
       roleplayDailyLimit: token.roleplayDailyLimit,
+      requireExam: token.requireExam,
     };
     return true;
   }

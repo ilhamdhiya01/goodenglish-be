@@ -2,7 +2,11 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { AdminTokensService, mistakeStats } from './admin-tokens.service';
+import {
+  AdminTokensService,
+  examStats,
+  mistakeStats,
+} from './admin-tokens.service';
 
 // ESM-only / DB-bound modules are mocked out, same as critiq's specs:
 // the class under test is constructed directly with hand-made fakes.
@@ -291,6 +295,81 @@ describe('AdminTokensService', () => {
       ],
     });
     expect(mistakeStats(undefined)).toMatchObject({ active: 0, top: [] });
+  });
+
+  it('requireExam: off unless chosen, changed only when named', async () => {
+    const a = setup();
+    await a.service.create({
+      label: 'X',
+      menus: ['vocab'],
+      levels: ['pre'],
+      maxDevices: 1,
+    } as any);
+    expect(createdData(a.prisma).requireExam).toBe(false);
+    const b = setup();
+    await b.service.create({
+      label: 'X',
+      menus: ['vocab'],
+      levels: ['pre'],
+      maxDevices: 1,
+      requireExam: true,
+    } as any);
+    expect(createdData(b.prisma).requireExam).toBe(true);
+    const c = setup();
+    await c.service.update('adm1', { label: 'Y' });
+    const data = (
+      c.prisma.accessToken.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      }
+    ).data;
+    expect(data).not.toHaveProperty('requireExam');
+  });
+
+  it('summary reads the placement result and exam history', () => {
+    expect(examStats(undefined)).toEqual({ placement: null, examAttempts: [] });
+    const r = examStats({
+      placement: {
+        status: 'done',
+        date: '2026-11-18T01:00:00Z',
+        recommended: { level: 'inter', week: 5 },
+      },
+      attempts: [
+        {
+          level: 'pre',
+          date: '2026-11-01T00:00:00Z',
+          pct: 70,
+          passed: false,
+          sections: {
+            vocab: { right: 10, total: 15 },
+            grammar: { right: 11, total: 15 },
+          },
+        },
+        {
+          level: 'pre',
+          date: '2026-11-03T00:00:00Z',
+          pct: 85,
+          passed: true,
+          sections: { vocab: { right: 13, total: 15 } },
+        },
+        { broken: true },
+      ],
+    });
+    expect(r.placement).toMatchObject({
+      status: 'done',
+      level: 'inter',
+      week: 5,
+    });
+    expect(r.examAttempts.map((a) => a.date)).toEqual([
+      '2026-11-03T00:00:00Z',
+      '2026-11-01T00:00:00Z',
+    ]);
+    expect(r.examAttempts[1].sections).toEqual([
+      { section: 'vocab', right: 10, total: 15 },
+      { section: 'grammar', right: 11, total: 15 },
+    ]);
+    expect(
+      examStats({ placement: { status: 'skipped' } }).placement,
+    ).toMatchObject({ status: 'skipped', level: null });
   });
 
   it('404s on an unknown token', async () => {

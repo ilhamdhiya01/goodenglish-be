@@ -11,6 +11,8 @@ export class SessionDto {
   menus!: MenuWire[];
   levels!: LevelWire[];
   expiresAt!: Date | null;
+  // "Wajib lulus ujian untuk naik level".
+  requireExam!: boolean;
 
   constructor(partial: Partial<SessionDto>) {
     Object.assign(this, partial);

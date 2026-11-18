@@ -19,6 +19,7 @@ export const PROGRESS_KEY_WIRE = {
   mistakes: ProgressKey.MISTAKES,
   listening: ProgressKey.LISTENING,
   reading: ProgressKey.READING,
+  exam: ProgressKey.EXAM,
 } as const satisfies Record<string, ProgressKey>;
 
 export type ProgressKeyWire = keyof typeof PROGRESS_KEY_WIRE;

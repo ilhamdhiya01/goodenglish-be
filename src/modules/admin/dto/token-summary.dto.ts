@@ -33,6 +33,42 @@ export class MistakeCategoryCountDto {
   }
 }
 
+// Tes penempatan: the latest result (or that it was skipped).
+export class PlacementResultDto {
+  status!: 'done' | 'skipped';
+  date!: string | null;
+  level!: string | null;
+  week!: number | null;
+
+  constructor(partial: Partial<PlacementResultDto>) {
+    Object.assign(this, partial);
+  }
+}
+
+// One part of an exam attempt.
+export class ExamSectionDto {
+  section!: string;
+  right!: number;
+  total!: number;
+
+  constructor(partial: Partial<ExamSectionDto>) {
+    Object.assign(this, partial);
+  }
+}
+
+// One end-of-level exam attempt.
+export class ExamAttemptDto {
+  level!: string;
+  date!: string;
+  pct!: number;
+  passed!: boolean;
+  sections!: ExamSectionDto[];
+
+  constructor(partial: Partial<ExamAttemptDto>) {
+    Object.assign(this, partial);
+  }
+}
+
 // Learning-progress overview for one token, derived from its progress docs.
 export class TokenSummaryDto {
   knownCount!: number;
@@ -47,6 +83,9 @@ export class TokenSummaryDto {
   mistakeActiveCount!: number;
   mistakeMasteredCount!: number;
   topMistakeCategories!: MistakeCategoryCountDto[];
+  // Tes penempatan + ujian akhir level (newest attempts first, at most 10).
+  placement!: PlacementResultDto | null;
+  examAttempts!: ExamAttemptDto[];
   lastProgressAt!: Date | null;
   sessions!: TokenSessionItemDto[];
   // Last ROLEPLAY_WEEKS weeks, newest first, including empty ones.

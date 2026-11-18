@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -68,4 +69,9 @@ export class CreateTokenDto {
   @Min(0)
   @Max(ROLEPLAY_DAILY_LIMIT_MAX)
   roleplayDailyLimit?: number | null;
+
+  // "Wajib lulus ujian untuk naik level"; omitted = off.
+  @IsOptional()
+  @IsBoolean()
+  requireExam?: boolean;
 }

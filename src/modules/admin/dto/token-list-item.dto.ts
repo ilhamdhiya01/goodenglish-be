@@ -19,6 +19,7 @@ export class TokenListItemDto {
   aiDailyLimit!: number | null;
   // "Main peran" sessions per day; null = unlimited.
   roleplayDailyLimit!: number | null;
+  requireExam!: boolean;
   activeDevices!: number;
   status!: TokenStatus;
   expiresAt!: Date | null;

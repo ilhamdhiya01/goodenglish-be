@@ -69,6 +69,8 @@ enum ProgressKey {
   LISTENING
   // Added with "Bacaan": texts read, quiz results, saved-word counts.
   READING
+  // Added with the placement test and end-of-level exams.
+  EXAM
 }
 
 // An access token IS the learner's identity: there are no user accounts.
@@ -90,6 +92,9 @@ model AccessToken {
   aiDailyLimit       Int?      @default(30)
   // "Main peran" sessions per day. null = unlimited.
   roleplayDailyLimit Int?      @default(3)
+  // The next level opens only after passing the end-of-level exam of the
+  // level before it (enforced by the app, like all progress).
+  requireExam        Boolean   @default(false)
   expiresAt          DateTime?
   revokedAt          DateTime?
   lastUsedAt         DateTime?

@@ -133,6 +133,7 @@ export class AuthService {
         menus: menusToWire(isAdmin ? Object.values(Menu) : token.menus),
         levels: levelsToWire(isAdmin ? Object.values(Level) : token.levels),
         expiresAt: token.expiresAt,
+        requireExam: token.requireExam,
       }),
     };
   }
@@ -151,6 +152,7 @@ export class AuthService {
       menus: menusToWire(access.menus),
       levels: levelsToWire(access.levels),
       expiresAt: access.expiresAt,
+      requireExam: access.requireExam,
     });
   }
 

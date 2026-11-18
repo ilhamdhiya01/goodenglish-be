@@ -22,4 +22,6 @@ export interface AccessContext {
   aiDailyLimit: number | null;
   // "Main peran" sessions per day; null = unlimited.
   roleplayDailyLimit: number | null;
+  // Next level only after passing the exam of the level before it.
+  requireExam: boolean;
 }
