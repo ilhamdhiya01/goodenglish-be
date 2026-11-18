@@ -1,4 +1,5 @@
 import { HttpException } from '@nestjs/common';
+import type { AccessContext } from '../../common/types/access-context';
 import { SttRateLimiter, SttService, type UploadedAudio } from './stt.service';
 
 jest.mock('@nestjs/config', () => ({ ConfigService: class {} }));
@@ -120,6 +121,34 @@ describe('SttService', () => {
     s.assertRate('a');
     expect(() => s.assertRate('a')).toThrow(HttpException);
     expect(() => s.assertRate('b')).not.toThrow();
+  });
+});
+
+describe('transcribeForReview', () => {
+  const access = (menus = ['REVIEW']) =>
+    ({ tokenId: 't1', menus }) as unknown as AccessContext;
+
+  it('needs the review menu and audio, then rate limits per token', async () => {
+    const s = service();
+    const spy = jest
+      .spyOn(s, 'transcribe')
+      .mockResolvedValue({ text: 'She goes.', language: 'en', durationSec: 2 });
+    expect(
+      await code(s.transcribeForReview(access(['VOCAB']), file())),
+    ).toEqual([403, 'review_not_allowed']);
+    expect(await code(s.transcribeForReview(access(), undefined))).toEqual([
+      422,
+      'stt_no_speech',
+    ]);
+    await expect(
+      s.transcribeForReview(access(), file(), 'id'),
+    ).resolves.toMatchObject({ text: 'She goes.' });
+    expect(spy).toHaveBeenLastCalledWith(expect.anything(), 'id');
+    await s.transcribeForReview(access(), file());
+    expect(await code(s.transcribeForReview(access(), file()))).toEqual([
+      429,
+      'stt_rate_limited',
+    ]);
   });
 });
 

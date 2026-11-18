@@ -1,4 +1,5 @@
 import { AiContextDto } from './dto/ai-context.dto';
+import { CHECK_INSTRUCTION } from './check-block';
 
 const LEVEL_NAMES: Record<string, string> = {
   beginner: 'Pemula (beginner)',
@@ -83,7 +84,7 @@ Koreksi kalimat:
 - Singkatan seperti I'm, don't, it's itu wajar dan alami; jangan sarankan untuk dihindari.
 - Pakai riwayat percakapan. Kalimat bahasa Indonesia dari pelajar setelah koreksi (misalnya "ini kan sedang berlangsung sekarang") adalah penjelasan maksudnya, bukan kalimat untuk dicek. Sesuaikan koreksimu dengan penjelasan itu.
 - Kalau ada kata yang sedang dibahas di konteks, perhatikan apakah kata itu dipakai dengan benar.
-- Pertanyaan biasa (misalnya "kasih contoh kalimat dengan kata ini" atau "apa bedanya since dan for?") dijawab biasa, tanpa format koreksi.`;
+- Pertanyaan biasa (misalnya "kasih contoh kalimat dengan kata ini" atau "apa bedanya since dan for?") dijawab biasa, tanpa format koreksi.${CHECK_INSTRUCTION}`;
 
 // No greeting: every answer opening with "Halo!" wastes the first line the
 // learner reads.

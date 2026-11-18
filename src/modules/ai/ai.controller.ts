@@ -19,6 +19,7 @@ import type { AccessContext } from '../../common/types/access-context';
 import { AiConversationsService } from './ai-conversations.service';
 import { AiQuotaService } from './ai-quota.service';
 import { AiService, assertAiMenu } from './ai.service';
+import { pipeAnswer } from './check-block';
 import {
   AiConversationDto,
   AiConversationSummaryDto,
@@ -69,12 +70,15 @@ export class AiController {
     });
     res.flushHeaders();
     res.write(sse('meta', { conversationId }));
-    let answer = '';
+    // What the learner sees (and what is stored): the answer without the
+    // hidden sentence-check block, which goes out as `event: check`.
+    const seen = { text: '' };
     try {
-      for await (const text of stream) {
-        answer += text;
-        res.write(sse(null, { text }));
-      }
+      await pipeAnswer(
+        stream,
+        (event, data) => res.write(sse(event, data)),
+        seen,
+      );
       res.write(sse('done', {}));
     } catch (err) {
       if (!abort.signal.aborted) {
@@ -84,9 +88,9 @@ export class AiController {
     } finally {
       res.end();
       // Kept even when cut off: the learner already saw that much of it.
-      if (answer.trim()) {
+      if (seen.text.trim()) {
         await this.conversations
-          .saveAnswer(conversationId, answer)
+          .saveAnswer(conversationId, seen.text)
           .catch((err: unknown) =>
             this.logger.error(err instanceof Error ? err.message : err),
           );

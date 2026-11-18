@@ -1,33 +1,21 @@
 import type { LevelWire } from '../../common/token/access-enums';
+import {
+  AI_MISTAKE_CATEGORIES,
+  FALLBACK_MISTAKE_CATEGORY,
+  MISTAKE_CATEGORIES,
+  type MistakeCategory,
+} from '../../common/mistake-categories';
 import type { RoleplayContextDto } from './dto/roleplay.dto';
 
-// Correction categories. "Buku kesalahanku" doesn't exist yet, so these are
-// the 16 Cheat sheet sections (goodenglish-fe const/cheatsheet.constant.ts):
-// the id is what's stored, the title is what the model reads. Keep in sync.
-export const ROLEPLAY_CATEGORIES = {
-  'aturan-dasar': 'Lima aturan dasar',
-  'am-is-are': 'Memilih am / is / are & it / they',
-  tense: 'Kapan pakai tense apa',
-  'sudah-belum': 'Sudah, belum, pernah',
-  pasif: 'Kalimat pasif (di-)',
-  pertanyaan: 'Membuat pertanyaan',
-  'a-an-the': 'a / an / the',
-  'to-atau-ing': 'to + V1 atau V-ing?',
-  preposisi: 'Preposisi tempat & kendaraan',
-  'preposisi-lain': 'Preposisi bahasa, kemampuan & keadaan',
-  'kata-tertukar': 'Kata yang sering tertukar',
-  waktu: 'Waktu & frekuensi',
-  'urutan-kata': 'Urutan kata',
-  kesalahan: 'Kesalahan yang sering berulang',
-  'frasa-penyelamat': 'Frasa penyelamat saat blank',
-  'cara-belajar': 'Cara belajar yang disepakati',
-} as const;
-export type RoleplayCategory = keyof typeof ROLEPLAY_CATEGORIES;
-export const ROLEPLAY_CATEGORY_IDS = Object.keys(
-  ROLEPLAY_CATEGORIES,
-) as RoleplayCategory[];
+// Correction categories: the shared "Buku kesalahanku" list (the model
+// reads the titles, the id is stored). Menyimak is for dictation only.
+export const ROLEPLAY_CATEGORIES = Object.fromEntries(
+  AI_MISTAKE_CATEGORIES.map((id) => [id, MISTAKE_CATEGORIES[id]]),
+) as Record<RoleplayCategory, string>;
+export type RoleplayCategory = MistakeCategory;
+export const ROLEPLAY_CATEGORY_IDS: RoleplayCategory[] = AI_MISTAKE_CATEGORIES;
 // Used when the model returns something outside the list.
-export const FALLBACK_CATEGORY: RoleplayCategory = 'kesalahan';
+export const FALLBACK_CATEGORY: RoleplayCategory = FALLBACK_MISTAKE_CATEGORY;
 
 export const LEVEL_TEXT: Record<LevelWire, string> = {
   beginner:

@@ -31,10 +31,62 @@ import {
   RoleplayWeekDto,
   TokenSessionItemDto,
   TokenSummaryDto,
+  MistakeCategoryCountDto,
 } from './dto/token-summary.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
 
 type TokenWithActive = AccessToken & { activeDevices: number };
+
+// "Buku kesalahanku" (progress doc MISTAKES): an array in the first
+// version, { v: 2, items } since. Old entries had no status (= active) and
+// could repeat; the same wrong → correct pair counts once.
+const normMistake = (s: unknown) =>
+  typeof s === 'string'
+    ? s
+        .toLowerCase()
+        .replace(/[‘’]/g, "'")
+        .replace(/[^a-z0-9' ]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    : '';
+export const mistakeStats = (doc: unknown) => {
+  const items: unknown[] = Array.isArray(doc)
+    ? doc
+    : doc &&
+        typeof doc === 'object' &&
+        Array.isArray((doc as { items?: unknown }).items)
+      ? (doc as { items: unknown[] }).items
+      : [];
+  const seen = new Map<string, { status: string; category: string }>();
+  items.forEach((raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const m = raw as Record<string, unknown>;
+    const key =
+      typeof m.key === 'string'
+        ? m.key
+        : `${normMistake(m.wrong)}→${normMistake(m.correct)}`;
+    if (!seen.has(key)) {
+      seen.set(key, {
+        status: typeof m.status === 'string' ? m.status : 'active',
+        category: typeof m.category === 'string' ? m.category : 'kesalahan',
+      });
+    }
+  });
+  const all = [...seen.values()];
+  const active = all.filter((m) => m.status === 'active');
+  const byCat = new Map<string, number>();
+  active.forEach((m) =>
+    byCat.set(m.category, (byCat.get(m.category) ?? 0) + 1),
+  );
+  return {
+    active: active.length,
+    mastered: all.filter((m) => m.status === 'mastered').length,
+    top: [...byCat.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 3)
+      .map(([id, count]) => new MistakeCategoryCountDto({ id, count })),
+  };
+};
 
 @Injectable()
 export class AdminTokensService {
@@ -209,6 +261,7 @@ export class AdminTokensService {
     const byKey = new Map(docs.map((d) => [d.key, d.data]));
     const countKeys = (v: unknown) =>
       v && typeof v === 'object' ? Object.keys(v).length : 0;
+    const mistakes = mistakeStats(byKey.get('MISTAKES'));
     const customDoc = byKey.get('CUSTOM');
     const custom: unknown[] = Array.isArray(customDoc) ? customDoc : [];
 
@@ -227,6 +280,9 @@ export class AdminTokensService {
       readingDoneCount: countKeys(
         (byKey.get('READING') as { done?: unknown } | undefined)?.done,
       ),
+      mistakeActiveCount: mistakes.active,
+      mistakeMasteredCount: mistakes.mastered,
+      topMistakeCategories: mistakes.top,
       lastProgressAt: docs.length
         ? new Date(Math.max(...docs.map((d) => d.updatedAt.getTime())))
         : null,
