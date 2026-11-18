@@ -31,7 +31,10 @@ import {
   RoleplayWeekDto,
   TokenSessionItemDto,
   TokenSummaryDto,
+  ExamAttemptDto,
+  ExamSectionDto,
   MistakeCategoryCountDto,
+  PlacementResultDto,
 } from './dto/token-summary.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
 
@@ -88,6 +91,64 @@ export const mistakeStats = (doc: unknown) => {
   };
 };
 
+// Tes penempatan + ujian akhir level (progress doc EXAM, written by the
+// app): { placement, attempts: [{ level, date, sections, pct, passed }] }.
+export const EXAM_ATTEMPTS_SHOWN = 10;
+export const examStats = (doc: unknown) => {
+  const d =
+    doc && typeof doc === 'object' ? (doc as Record<string, unknown>) : {};
+  const p =
+    d.placement && typeof d.placement === 'object'
+      ? (d.placement as Record<string, unknown>)
+      : null;
+  const rec =
+    p?.recommended && typeof p.recommended === 'object'
+      ? (p.recommended as Record<string, unknown>)
+      : {};
+  const placement =
+    p && (p.status === 'done' || p.status === 'skipped')
+      ? new PlacementResultDto({
+          status: p.status,
+          date: typeof p.date === 'string' ? p.date : null,
+          level: typeof rec.level === 'string' ? rec.level : null,
+          week: typeof rec.week === 'number' ? rec.week : null,
+        })
+      : null;
+  const attempts = (Array.isArray(d.attempts) ? d.attempts : [])
+    .filter(
+      (a): a is Record<string, unknown> =>
+        !!a &&
+        typeof a === 'object' &&
+        typeof (a as Record<string, unknown>).level === 'string' &&
+        typeof (a as Record<string, unknown>).date === 'string',
+    )
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, EXAM_ATTEMPTS_SHOWN)
+    .map((a) => {
+      const sections =
+        a.sections && typeof a.sections === 'object'
+          ? Object.entries(a.sections as Record<string, unknown>)
+          : [];
+      return new ExamAttemptDto({
+        level: a.level as string,
+        date: a.date as string,
+        pct: typeof a.pct === 'number' ? a.pct : 0,
+        passed: a.passed === true,
+        sections: sections
+          .filter(([, v]) => v && typeof v === 'object')
+          .map(([section, v]) => {
+            const x = v as Record<string, unknown>;
+            return new ExamSectionDto({
+              section,
+              right: typeof x.right === 'number' ? x.right : 0,
+              total: typeof x.total === 'number' ? x.total : 0,
+            });
+          }),
+      });
+    });
+  return { placement, examAttempts: attempts };
+};
+
 @Injectable()
 export class AdminTokensService {
   constructor(
@@ -128,6 +189,7 @@ export class AdminTokensService {
           dto.roleplayDailyLimit === undefined
             ? ROLEPLAY_DAILY_LIMIT_DEFAULT
             : dto.roleplayDailyLimit,
+        requireExam: dto.requireExam ?? false,
       },
     });
     return new CreatedTokenDto({
@@ -169,6 +231,9 @@ export class AdminTokensService {
         : {}),
       ...(dto.roleplayDailyLimit !== undefined
         ? { roleplayDailyLimit: dto.roleplayDailyLimit }
+        : {}),
+      ...(dto.requireExam !== undefined
+        ? { requireExam: dto.requireExam }
         : {}),
     };
     const token = await this.prisma.accessToken.update({ where: { id }, data });
@@ -283,6 +348,7 @@ export class AdminTokensService {
       mistakeActiveCount: mistakes.active,
       mistakeMasteredCount: mistakes.mastered,
       topMistakeCategories: mistakes.top,
+      ...examStats(byKey.get('EXAM')),
       lastProgressAt: docs.length
         ? new Date(Math.max(...docs.map((d) => d.updatedAt.getTime())))
         : null,
@@ -412,6 +478,7 @@ export class AdminTokensService {
       maxDevices: t.maxDevices,
       aiDailyLimit: t.aiDailyLimit,
       roleplayDailyLimit: t.roleplayDailyLimit,
+      requireExam: t.requireExam,
       activeDevices: t.activeDevices,
       status,
       expiresAt: t.expiresAt,

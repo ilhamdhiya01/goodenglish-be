@@ -25,6 +25,7 @@ const makeToken = (over: Record<string, unknown> = {}) => ({
   menus: ['VOCAB'],
   levels: ['BEGINNER'],
   maxDevices: 2,
+  requireExam: false,
   expiresAt: null,
   revokedAt: null,
   ...over,
@@ -51,6 +52,24 @@ const setup = (token: unknown, activeSessions = 0) => {
   const service = new AuthService(prisma as any, jwt as any, config as any);
   return { service, prisma, tx, jwt };
 };
+
+describe('AuthService session', () => {
+  it('tells the app whether the next level needs the exam', async () => {
+    const { service } = setup(makeToken({ requireExam: true }));
+    const res = await service.redeem(PLAIN, 'Chrome');
+    expect(res.session.requireExam).toBe(true);
+    expect(
+      service.toSessionDto({
+        label: 'Budi',
+        role: 'LEARNER',
+        menus: ['VOCAB'],
+        levels: ['PRE'],
+        expiresAt: null,
+        requireExam: false,
+      } as never),
+    ).toMatchObject({ levels: ['pre'], requireExam: false });
+  });
+});
 
 describe('AuthService.redeem', () => {
   it('looks the token up by its hash and opens a session', async () => {

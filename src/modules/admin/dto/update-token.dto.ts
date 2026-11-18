@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsArray,
   IsDateString,
   IsIn,
@@ -74,4 +75,8 @@ export class UpdateTokenDto {
   @Min(0)
   @Max(ROLEPLAY_DAILY_LIMIT_MAX)
   roleplayDailyLimit?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  requireExam?: boolean;
 }
