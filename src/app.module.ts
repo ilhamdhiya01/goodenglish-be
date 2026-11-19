@@ -4,6 +4,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { LaporanModule } from './modules/laporan/laporan.module';
 import { ListeningModule } from './modules/listening/listening.module';
 import { ReadingModule } from './modules/reading/reading.module';
 import { RencanaModule } from './modules/rencana/rencana.module';
@@ -25,6 +26,7 @@ import { WordsModule } from './modules/words/words.module';
     ListeningModule,
     ReadingModule,
     RencanaModule,
+    LaporanModule,
     SttModule,
   ],
   controllers: [],

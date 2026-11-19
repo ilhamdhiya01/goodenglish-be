@@ -114,6 +114,7 @@ model AccessToken {
   aiUsage          AiUsage[]
   aiConversations  AiConversation[]
   roleplaySessions RoleplaySession[]
+  activityReports  ActivityReport[]
 
   @@map("access_tokens")
 }
@@ -383,4 +384,31 @@ model RencanaMinggu {
 
   @@id([level, week])
   @@map("rencana_minggu")
+}
+
+// One thing a learner did (a card reviewed, a text read, a set finished…),
+// reported by the app. Append-only: never updated or deleted; undoing
+// something is a new report. "Rencana" counts its ticks, streak and weekly
+// checkpoint from these only. Kinds: goodenglish-fe lib/rencana/rencana.contract.ts.
+model ActivityReport {
+  // Made by the app, so a report sent twice is saved once.
+  id            String      @db.VarChar(40)
+  accessTokenId String
+  accessToken   AccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  jenis         String      @db.VarChar(40)
+  // Menu that sent it.
+  menu          String      @db.VarChar(20)
+  level         Level?
+  week          Int?
+  // Learning day (days since 1970-01-01 in the token's time zone).
+  day           Int
+  skor          Int?
+  total         Int?
+  jumlah        Int?
+  data          Json?
+  createdAt     DateTime    @default(now())
+
+  @@id([accessTokenId, id])
+  @@index([accessTokenId, day])
+  @@map("laporan_aktivitas")
 }
