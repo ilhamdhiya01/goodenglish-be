@@ -127,6 +127,7 @@ export class AuthService {
       jwt,
       maxAgeMs: this.sessionDays * DAY_MS,
       session: new SessionDto({
+        tokenId: token.id,
         label: token.label,
         role: roleToWire(token.role),
         // Admins always get everything, even if the stored arrays are empty.
@@ -134,6 +135,7 @@ export class AuthService {
         levels: levelsToWire(isAdmin ? Object.values(Level) : token.levels),
         expiresAt: token.expiresAt,
         requireExam: token.requireExam,
+        timeZone: token.timeZone,
       }),
     };
   }
@@ -147,12 +149,14 @@ export class AuthService {
 
   toSessionDto(access: AccessContext): SessionDto {
     return new SessionDto({
+      tokenId: access.tokenId,
       label: access.label,
       role: roleToWire(access.role),
       menus: menusToWire(access.menus),
       levels: levelsToWire(access.levels),
       expiresAt: access.expiresAt,
       requireExam: access.requireExam,
+      timeZone: access.timeZone,
     });
   }
 

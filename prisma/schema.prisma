@@ -100,6 +100,9 @@ model AccessToken {
   // The next level opens only after passing the end-of-level exam of the
   // level before it (enforced by the app, like all progress).
   requireExam        Boolean   @default(false)
+  // Learning day (Ulang schedule, streak, activity log) follows this IANA
+  // time zone, not UTC and not the device clock.
+  timeZone           String    @default("Asia/Jakarta") @db.VarChar(64)
   expiresAt          DateTime?
   revokedAt          DateTime?
   lastUsedAt         DateTime?
@@ -350,11 +353,17 @@ model WordMeaning {
   // Lower-cased word as tapped
   word      String   @db.VarChar(60)
   level     Level
+  // Hash of the sentence the word was tapped in ("" = no sentence): the same
+  // word can mean different things in different sentences.
+  ctx       String   @default("") @db.VarChar(16)
+  // That sentence, for the admin screen.
+  sentence  String   @default("") @db.VarChar(400)
   lemma     String   @db.VarChar(60)
   meaningId String   @db.VarChar(200)
   pron      String   @default("") @db.VarChar(80)
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  @@unique([word, level])
+  @@unique([word, level, ctx])
   @@map("word_meanings")
 }

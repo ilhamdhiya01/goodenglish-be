@@ -17,6 +17,7 @@ import type { AccessContext } from '../../common/types/access-context';
 import {
   AdminListQueryDto,
   GenerateReadingDto,
+  PublishReadingDto,
   ReadingTextDto,
   UpdateReadingDto,
 } from './dto/reading.dto';
@@ -46,18 +47,22 @@ export class AdminReadingController {
   @Patch(':id')
   @ResponseMessage('Reading text saved')
   update(
-    @CurrentAccess() access: AccessContext,
     @Param('id') id: string,
     @Body() dto: UpdateReadingDto,
   ): Promise<ReadingTextDto> {
-    return this.reading.update(id, dto, access.label);
+    return this.reading.update(id, dto);
   }
 
+  // 409 reading_slot_taken while another text of the slot is published;
+  // 422 reading_has_warnings unless { force: true }.
   @Post(':id/publish')
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('Reading text published')
-  publish(@Param('id') id: string): Promise<ReadingTextDto> {
-    return this.reading.setPublished(id, true);
+  publish(
+    @Param('id') id: string,
+    @Body() dto: PublishReadingDto,
+  ): Promise<ReadingTextDto> {
+    return this.reading.setPublished(id, true, dto?.force === true);
   }
 
   @Post(':id/unpublish')

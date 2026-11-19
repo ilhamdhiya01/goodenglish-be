@@ -1,10 +1,12 @@
 import {
+  ConflictException,
   ForbiddenException,
   HttpException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { assertLevelOpen } from '../../common/levels/effective-levels';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   LEVEL_WIRE,
@@ -34,15 +36,6 @@ import { GENERATE_SCHEMA, generateInstruction } from './reading.prompts';
 export const assertReading = (access: AccessContext): void => {
   if (!access.menus.includes(Menu.READING)) {
     throw new ForbiddenException({ field: '', message: 'reading_not_allowed' });
-  }
-};
-
-export const assertLevel = (access: AccessContext, level: LevelWire): void => {
-  if (!access.levels.includes(LEVEL_WIRE[level])) {
-    throw new ForbiddenException({
-      field: 'level',
-      message: 'level_not_allowed',
-    });
   }
 };
 
@@ -112,7 +105,7 @@ export class ReadingService {
     level: LevelWire,
   ): Promise<ReadingTextDto[]> {
     assertReading(access);
-    assertLevel(access, level);
+    await assertLevelOpen(this.prisma, access, level);
     const texts = await this.prisma.readingText.findMany({
       where: { level: LEVEL_WIRE[level], status: 'PUBLISHED' },
       orderBy: [{ week: 'asc' }, { slot: 'asc' }, { publishedAt: 'asc' }],
@@ -182,11 +175,8 @@ export class ReadingService {
     return toDto(text);
   }
 
-  async update(
-    id: string,
-    dto: UpdateReadingDto,
-    by: string,
-  ): Promise<ReadingTextDto> {
+  // Editing keeps who made the text (createdBy).
+  async update(id: string, dto: UpdateReadingDto): Promise<ReadingTextDto> {
     const cur = toDto(await this.findOrThrow(id));
     let parsed: ReturnType<typeof validateText>;
     try {
@@ -215,13 +205,42 @@ export class ReadingService {
     }
     const text = await this.prisma.readingText.update({
       where: { id },
-      data: { ...contentData(parsed.content, parsed.warnings), createdBy: by },
+      data: contentData(parsed.content, parsed.warnings),
     });
     return toDto(text);
   }
 
-  async setPublished(id: string, published: boolean): Promise<ReadingTextDto> {
-    await this.findOrThrow(id);
+  // One published text per level, week and slot; a text that misses a
+  // content rule only goes out on purpose (force).
+  async setPublished(
+    id: string,
+    published: boolean,
+    force = false,
+  ): Promise<ReadingTextDto> {
+    const cur = await this.findOrThrow(id);
+    if (published && cur.status !== 'PUBLISHED') {
+      const taken = await this.prisma.readingText.findFirst({
+        where: {
+          level: cur.level,
+          week: cur.week,
+          slot: cur.slot,
+          status: 'PUBLISHED',
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+      if (taken)
+        throw new ConflictException({
+          field: 'slot',
+          message: 'reading_slot_taken',
+        });
+      const warnings = Array.isArray(cur.warnings) ? cur.warnings : [];
+      if (warnings.length && !force)
+        throw new UnprocessableEntityException({
+          field: 'force',
+          message: 'reading_has_warnings',
+        });
+    }
     const text = await this.prisma.readingText.update({
       where: { id },
       data: published

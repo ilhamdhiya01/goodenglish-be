@@ -47,11 +47,10 @@ export class AdminListeningController {
   @Patch(':id')
   @ResponseMessage('Listening item saved')
   update(
-    @CurrentAccess() access: AccessContext,
     @Param('id') id: string,
     @Body() dto: UpdateListeningDto,
   ): Promise<ListeningItemDto> {
-    return this.listening.update(id, dto, access.label);
+    return this.listening.update(id, dto);
   }
 
   @Post(':id/publish')

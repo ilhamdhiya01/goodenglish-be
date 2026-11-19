@@ -39,7 +39,8 @@ import {
 } from './dto/token-summary.dto';
 import { LearnerOverviewDto } from './dto/learner-overview.dto';
 import { UpdateTokenDto } from './dto/update-token.dto';
-import { learnerRow, todayDay } from './learner-overview';
+import { learnerRow } from './learner-overview';
+import { dayIn, PILOT } from '../../common/pilot.config';
 
 type TokenWithActive = AccessToken & { activeDevices: number };
 
@@ -193,6 +194,7 @@ export class AdminTokensService {
             ? ROLEPLAY_DAILY_LIMIT_DEFAULT
             : dto.roleplayDailyLimit,
         requireExam: dto.requireExam ?? false,
+        timeZone: dto.timeZone ?? PILOT.defaultTimeZone,
       },
     });
     return new CreatedTokenDto({
@@ -238,6 +240,7 @@ export class AdminTokensService {
       ...(dto.requireExam !== undefined
         ? { requireExam: dto.requireExam }
         : {}),
+      ...(dto.timeZone !== undefined ? { timeZone: dto.timeZone } : {}),
     };
     const token = await this.prisma.accessToken.update({ where: { id }, data });
     return this.withActiveDevices(token);
@@ -408,10 +411,13 @@ export class AdminTokensService {
       m[d.key] = d.data;
       byToken.set(d.accessTokenId, m);
     }
-    const today = todayDay(now.getTime());
     return tokens.map((t) => {
+      // The learner's own learning day (token time zone).
+      const today = dayIn(now.getTime(), t.timeZone || PILOT.defaultTimeZone);
       const row = learnerRow(byToken.get(t.id) ?? {}, today);
-      const activity =
+      // Learning recorded in the activity log only: opening the app (which
+      // refreshes lastUsedAt) is not learning, so it is shown apart.
+      const lastActiveAt =
         row.lastActivityDay === null
           ? null
           : new Date(
@@ -420,10 +426,6 @@ export class AdminTokensService {
                 now.getTime(),
               ),
             );
-      const lastActiveAt =
-        [t.lastUsedAt, activity]
-          .filter((x): x is Date => !!x)
-          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
       return new LearnerOverviewDto({
         id: t.id,
         label: t.label,
@@ -432,6 +434,7 @@ export class AdminTokensService {
         menus: menusToWire(t.menus),
         level: row.level,
         lastActiveAt,
+        lastOpenedAt: t.lastUsedAt,
         streak: row.streak,
         minutes7d: row.minutes7d,
         wordsThisWeek: row.wordsThisWeek,
@@ -551,6 +554,7 @@ export class AdminTokensService {
       aiDailyLimit: t.aiDailyLimit,
       roleplayDailyLimit: t.roleplayDailyLimit,
       requireExam: t.requireExam,
+      timeZone: t.timeZone,
       activeDevices: t.activeDevices,
       status,
       expiresAt: t.expiresAt,

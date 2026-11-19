@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { assertLevelOpen } from '../../common/levels/effective-levels';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   LEVEL_WIRE,
@@ -82,13 +83,8 @@ export class ListeningService {
     level: LevelWire,
   ): Promise<ListeningItemDto[]> {
     assertListening(access);
+    await assertLevelOpen(this.prisma, access, level);
     const lvl = LEVEL_WIRE[level];
-    if (!access.levels.includes(lvl)) {
-      throw new ForbiddenException({
-        field: 'level',
-        message: 'level_not_allowed',
-      });
-    }
     const items = await this.prisma.listeningItem.findMany({
       where: { level: lvl, status: 'PUBLISHED' },
       orderBy: [{ week: 'asc' }, { publishedAt: 'asc' }],
@@ -171,11 +167,8 @@ export class ListeningService {
     });
   }
 
-  async update(
-    id: string,
-    dto: UpdateListeningDto,
-    by: string,
-  ): Promise<ListeningItemDto> {
+  // Editing keeps who made the item (createdBy).
+  async update(id: string, dto: UpdateListeningDto): Promise<ListeningItemDto> {
     const cur = await this.findOrThrow(id);
     const current = toDto(cur);
     let content: ListeningContent;
@@ -205,7 +198,6 @@ export class ListeningService {
       data: {
         ...contentData(content),
         ...(dto.week !== undefined ? { week: dto.week } : {}),
-        createdBy: by,
       },
     });
     return toDto(item);

@@ -26,6 +26,7 @@ const makeToken = (over: Record<string, unknown> = {}) => ({
   levels: ['BEGINNER'],
   maxDevices: 2,
   requireExam: false,
+  timeZone: 'Asia/Jakarta',
   expiresAt: null,
   revokedAt: null,
   ...over,
@@ -54,6 +55,12 @@ const setup = (token: unknown, activeSessions = 0) => {
 };
 
 describe('AuthService session', () => {
+  it("tells the app the token's learning-day time zone", async () => {
+    const { service } = setup(makeToken({ timeZone: 'Asia/Jayapura' }));
+    const res = await service.redeem(PLAIN, 'Chrome');
+    expect(res.session.timeZone).toBe('Asia/Jayapura');
+  });
+
   it('tells the app whether the next level needs the exam', async () => {
     const { service } = setup(makeToken({ requireExam: true }));
     const res = await service.redeem(PLAIN, 'Chrome');

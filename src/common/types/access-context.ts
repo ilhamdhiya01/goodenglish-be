@@ -24,4 +24,6 @@ export interface AccessContext {
   roleplayDailyLimit: number | null;
   // Next level only after passing the exam of the level before it.
   requireExam: boolean;
+  // IANA time zone of the learning day.
+  timeZone: string;
 }
