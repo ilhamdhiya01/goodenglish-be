@@ -23,7 +23,7 @@ import {
   FinishRoleplayDto,
   MAX_HELP,
   MAX_TRANSCRIBE,
-  MAX_USER_TURNS,
+  modeOfTurns,
   RoleplayContextDto,
   RoleplayHelpDto,
   RoleplayLineDto,
@@ -33,6 +33,7 @@ import {
   RoleplayTurnDto,
   RoleplayUsageDto,
   StartRoleplayDto,
+  turnsOfMode,
   TranscribeDto,
   TranscriptDto,
 } from './dto/roleplay.dto';
@@ -223,6 +224,7 @@ export class RoleplayService {
         day: jakartaDay(),
         scenarioId: dto.scenarioId,
         context: { ...dto.context },
+        maxTurns: turnsOfMode(dto.mode),
       },
     });
     try {
@@ -237,6 +239,8 @@ export class RoleplayService {
         id: session.id,
         reply: turn.reply,
         remaining: limit === null ? null : Math.max(0, limit - used),
+        mode: dto.mode ?? 'penuh',
+        maxTurns: turnsOfMode(dto.mode),
       });
     } catch (err) {
       await this.prisma.roleplaySession
@@ -282,7 +286,7 @@ export class RoleplayService {
     const last = dto.transcript[dto.transcript.length - 1];
     if (last.role !== 'user') throw fail('roleplay_bad_turn');
     const userTurns = userTurnsOf(dto.transcript);
-    if (userTurns > MAX_USER_TURNS) throw fail('roleplay_turn_limit');
+    if (userTurns > s.maxTurns) throw fail('roleplay_turn_limit');
     // Reaching QUOTA_TURNS takes the session off today's quota.
     const limit = access.roleplayDailyLimit;
     if (
@@ -312,7 +316,7 @@ export class RoleplayService {
     return new RoleplayTurnDto({
       ...turn,
       userTurns,
-      turnsLeft: MAX_USER_TURNS - userTurns,
+      turnsLeft: s.maxTurns - userTurns,
     });
   }
 
@@ -397,7 +401,7 @@ export class RoleplayService {
     }
     const userTurns = userTurnsOf(dto.transcript);
     if (!userTurns) throw fail('roleplay_no_turns');
-    if (userTurns > MAX_USER_TURNS) throw fail('roleplay_turn_limit');
+    if (userTurns > s.maxTurns) throw fail('roleplay_turn_limit');
 
     let parsed: ReturnType<typeof parseSummary>;
     try {
@@ -436,6 +440,7 @@ export class RoleplayService {
       durationSec,
       userTurns,
       stepsDone,
+      mode: modeOfTurns(s.maxTurns),
     });
   }
 }

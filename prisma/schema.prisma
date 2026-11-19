@@ -254,6 +254,8 @@ model RoleplaySession {
   context         Json
   stepsDone       Int[]       @default([])
   userTurns       Int         @default(0)
+  // Learner turns allowed: 12 (full) or 6 (short practice, "Rencana").
+  maxTurns        Int         @default(12)
   helpCount       Int         @default(0)
   // Spoken answers written down by Gemini ("Main peran" mic).
   transcribeCount Int         @default(0)
