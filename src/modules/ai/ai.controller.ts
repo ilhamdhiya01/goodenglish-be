@@ -20,6 +20,11 @@ import { AiConversationsService } from './ai-conversations.service';
 import { AiQuotaService } from './ai-quota.service';
 import { AiService, assertAiMenu } from './ai.service';
 import { pipeAnswer } from './check-block';
+import { CheckSentencesService } from './check-sentences.service';
+import {
+  CheckSentencesDto,
+  CheckSentencesResultDto,
+} from './dto/check-sentences.dto';
 import {
   AiConversationDto,
   AiConversationSummaryDto,
@@ -39,7 +44,19 @@ export class AiController {
     private readonly ai: AiService,
     private readonly quota: AiQuotaService,
     private readonly conversations: AiConversationsService,
+    private readonly checker: CheckSentencesService,
   ) {}
+
+  // "Rencana › Pakai": up to 3 sentences, one AI call, one quota unit.
+  @Post('check-sentences')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Sentences checked')
+  checkSentences(
+    @CurrentAccess() access: AccessContext,
+    @Body() dto: CheckSentencesDto,
+  ): Promise<CheckSentencesResultDto> {
+    return this.checker.check(access, dto);
+  }
 
   // Server-sent events: first `event: meta` with the conversation id (new
   // when the request had none), then `data: {"text": "..."}` per chunk, then
