@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { ListeningModule } from './modules/listening/listening.module';
 import { ReadingModule } from './modules/reading/reading.module';
+import { RencanaModule } from './modules/rencana/rencana.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { RoleplayModule } from './modules/roleplay/roleplay.module';
 import { SttModule } from './modules/stt/stt.module';
@@ -23,6 +24,7 @@ import { WordsModule } from './modules/words/words.module';
     RoleplayModule,
     ListeningModule,
     ReadingModule,
+    RencanaModule,
     SttModule,
   ],
   controllers: [],

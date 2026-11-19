@@ -367,3 +367,20 @@ model WordMeaning {
   @@unique([word, level, ctx])
   @@map("word_meanings")
 }
+
+// "Rencana": what a level's week practises, filled in by the admin. Weeks
+// without a row fall back in the app (Bertanya; scenarios in turn).
+model RencanaMinggu {
+  level        Level
+  week         Int
+  // Skenario of the week (frontend scenario id).
+  scenarioId   String?  @db.VarChar(40)
+  // Panduan grammar topic of the week (whb, irr, prep, bedo, tense, thit,
+  // conj, r = Bertanya).
+  grammarTopic String?  @db.VarChar(16)
+  updatedBy    String   @default("") @db.VarChar(80)
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@id([level, week])
+  @@map("rencana_minggu")
+}
