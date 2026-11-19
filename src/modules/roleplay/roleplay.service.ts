@@ -58,6 +58,10 @@ const TURN_TIMEOUT_MS = 20_000;
 const SUMMARY_TIMEOUT_MS = 30_000;
 // Turns are refused after this; a full session takes ~10 minutes.
 export const SESSION_MAX_MS = 60 * 60 * 1000;
+/** A session uses the daily quota once the learner has spoken this often. */
+export const QUOTA_TURNS = 3;
+/** Starts per day allowed, as a multiple of the daily quota. */
+export const STARTS_FACTOR = 3;
 // The summary can still be (re)fetched a while after the last turn.
 export const FINISH_MAX_MS = 2 * 60 * 60 * 1000;
 
@@ -160,10 +164,30 @@ export class RoleplayService {
     return new BadGatewayException({ field: '', message: 'ai_failed' });
   }
 
-  private todayCount(tokenId: string): Promise<number> {
+  // Sessions that used today's quota: those that reached QUOTA_TURNS turns.
+  // One left earlier (a mis-tap, a mic that didn't work) doesn't count.
+  private todayCount(tokenId: string, exceptId?: string): Promise<number> {
+    return this.prisma.roleplaySession.count({
+      where: {
+        accessTokenId: tokenId,
+        day: jakartaDay(),
+        userTurns: { gte: QUOTA_TURNS },
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+    });
+  }
+
+  private startedToday(tokenId: string): Promise<number> {
     return this.prisma.roleplaySession.count({
       where: { accessTokenId: tokenId, day: jakartaDay() },
     });
+  }
+
+  private quotaExceeded() {
+    return new HttpException(
+      { field: '', message: 'roleplay_quota_exceeded' },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   async usage(access: AccessContext): Promise<RoleplayUsageDto> {
@@ -174,9 +198,10 @@ export class RoleplayService {
     });
   }
 
-  // Takes one session off today's quota and gets the AI's opening line. The
-  // row is created first and counted after, so two starts at once can't both
-  // slip under the limit; if Gemini fails the row goes and the quota with it.
+  // Opens a session and gets the AI's opening line. The quota is taken at
+  // the QUOTA_TURNS-th turn (see turn()); here a full day is refused, and so
+  // are too many starts that never got that far (STARTS_FACTOR × the quota),
+  // so the opening lines can't be farmed. If Gemini fails the row goes.
   async start(
     access: AccessContext,
     dto: StartRoleplayDto,
@@ -184,6 +209,14 @@ export class RoleplayService {
     assertRoleplay(access);
     await this.gemini(); // 503 before touching the quota
     const limit = access.roleplayDailyLimit;
+    const used = await this.todayCount(access.tokenId);
+    if (
+      limit !== null &&
+      (used >= limit ||
+        (await this.startedToday(access.tokenId)) >=
+          Math.max(limit, 1) * STARTS_FACTOR)
+    )
+      throw this.quotaExceeded();
     const session = await this.prisma.roleplaySession.create({
       data: {
         accessTokenId: access.tokenId,
@@ -192,14 +225,6 @@ export class RoleplayService {
         context: { ...dto.context },
       },
     });
-    const used = await this.todayCount(access.tokenId);
-    if (limit !== null && used > limit) {
-      await this.prisma.roleplaySession.delete({ where: { id: session.id } });
-      throw new HttpException(
-        { field: '', message: 'roleplay_quota_exceeded' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
     try {
       const raw = await this.generate(
         turnInstruction(dto.context),
@@ -258,6 +283,15 @@ export class RoleplayService {
     if (last.role !== 'user') throw fail('roleplay_bad_turn');
     const userTurns = userTurnsOf(dto.transcript);
     if (userTurns > MAX_USER_TURNS) throw fail('roleplay_turn_limit');
+    // Reaching QUOTA_TURNS takes the session off today's quota.
+    const limit = access.roleplayDailyLimit;
+    if (
+      limit !== null &&
+      s.userTurns < QUOTA_TURNS &&
+      userTurns >= QUOTA_TURNS &&
+      (await this.todayCount(access.tokenId, s.id)) >= limit
+    )
+      throw this.quotaExceeded();
 
     let turn: ReturnType<typeof parseTurn>;
     try {

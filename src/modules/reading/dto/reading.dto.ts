@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  IsBoolean,
   IsArray,
   IsIn,
   IsInt,
@@ -230,6 +231,60 @@ export class ReadingTextDto {
   updatedAt!: Date;
 
   constructor(o: ReadingTextDto) {
+    Object.assign(this, o);
+  }
+}
+
+export class PublishReadingDto {
+  /** Publish even though the text misses a content rule (warnings). */
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
+
+export class WordMeaningQueryDto {
+  @IsOptional()
+  @IsIn(LEVEL_WIRE_VALUES)
+  level?: LevelWire;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  q?: string;
+}
+
+export class UpdateWordMeaningDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  lemma?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  meaningId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  pron?: string;
+}
+
+export class WordMeaningDto {
+  id!: string;
+  word!: string;
+  level!: LevelWire;
+  /** The sentence it was looked up in ("" = from before sentences). */
+  sentence!: string;
+  lemma!: string;
+  meaningId!: string;
+  pron!: string;
+  createdAt!: Date;
+  updatedAt!: Date;
+
+  constructor(o: WordMeaningDto) {
     Object.assign(this, o);
   }
 }

@@ -13,7 +13,7 @@ import type { AiSettingsService } from '../ai/ai-settings.service';
 import type { SttService, UploadedAudio } from '../stt/stt.service';
 import type { RoleplayContextDto } from './dto/roleplay.dto';
 import { OPENING_CUE } from './roleplay.prompts';
-import { RoleplayService, toContents } from './roleplay.service';
+import { QUOTA_TURNS, RoleplayService, toContents } from './roleplay.service';
 
 // Same approach as the AI specs: DB-bound and network modules are mocked and
 // the service is built with hand-made fakes.
@@ -153,17 +153,42 @@ describe('RoleplayService', () => {
       );
     });
 
-    it('refuses past the daily limit and gives the slot back', async () => {
-      const { service, prisma } = setup({ today: 4 });
+    it('refuses once the day is used up, before opening a session', async () => {
+      const { service, prisma } = setup({ today: 3 });
       const err = await service
         .start(access(undefined, 3), { scenarioId: 'order', context: ctx })
         .catch((e: HttpException) => e);
       expect(err).toBeInstanceOf(HttpException);
       expect((err as HttpException).getStatus()).toBe(429);
-      expect(prisma.roleplaySession.delete).toHaveBeenCalledWith({
-        where: { id: 's1' },
-      });
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(generateContent).not.toHaveBeenCalled();
+    });
+
+    it('only sessions that reached 3 turns use the quota', async () => {
+      const { service, prisma } = setup({ today: 0 });
+      generateContent.mockResolvedValue(
+        reply({ reply: 'Hello', steps_done: [], mission_complete: false }),
+      );
+      await service.start(access(undefined, 3), {
+        scenarioId: 'order',
+        context: ctx,
+      });
+      expect(prisma.roleplaySession.count.mock.calls[0][0].where).toMatchObject(
+        { userTurns: { gte: QUOTA_TURNS } },
+      );
+    });
+
+    it('caps starts that never got going at 3x the quota', async () => {
+      const { service, prisma } = setup();
+      // 0 sessions used the quota, but 9 were started today.
+      prisma.roleplaySession.count
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(9);
+      const err = await service
+        .start(access(undefined, 3), { scenarioId: 'order', context: ctx })
+        .catch((e: HttpException) => e);
+      expect((err as HttpException).getStatus()).toBe(429);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
 
     it('never refuses an unlimited token', async () => {
@@ -193,6 +218,43 @@ describe('RoleplayService', () => {
         service.start(access(), { scenarioId: 'order', context: ctx }),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('quota at the 3rd turn', () => {
+    const three = lines(
+      ['ai', 'Hi!'],
+      ['user', 'one'],
+      ['ai', 'Ok'],
+      ['user', 'two'],
+      ['ai', 'And?'],
+      ['user', 'three'],
+    );
+
+    it('refuses the 3rd turn when the day is already used up', async () => {
+      const { service, prisma } = setup({
+        today: 3,
+        session: { userTurns: 2 },
+      });
+      const err = await service
+        .turn(access(undefined, 3), 's1', { transcript: three })
+        .catch((e: HttpException) => e);
+      expect((err as HttpException).getStatus()).toBe(429);
+      // This session itself isn't counted twice.
+      expect(prisma.roleplaySession.count.mock.calls[0][0].where).toMatchObject(
+        { id: { not: 's1' } },
+      );
+    });
+
+    it('a session that already took its quota goes on', async () => {
+      const { service } = setup({ today: 3, session: { userTurns: 3 } });
+      generateContent.mockResolvedValue(
+        reply({ reply: 'Great', steps_done: [], mission_complete: false }),
+      );
+      const four = [...three, ...lines(['ai', 'Hm'], ['user', 'four'])];
+      await expect(
+        service.turn(access(undefined, 3), 's1', { transcript: four }),
+      ).resolves.toMatchObject({ userTurns: 4 });
     });
   });
 

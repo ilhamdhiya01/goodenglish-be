@@ -7,8 +7,10 @@ export class LearnerOverviewDto {
   menus!: string[];
   /** Active level in the app (progress doc LEVEL), if set. */
   level!: string | null;
-  /** Latest of the last sign-in and the last recorded activity. */
+  /** Last day with recorded learning (activity log), end of that day. */
   lastActiveAt!: Date | null;
+  /** Last time the app was opened (any request with the session). */
+  lastOpenedAt!: Date | null;
   streak!: number;
   minutes7d!: number;
   wordsThisWeek!: number;

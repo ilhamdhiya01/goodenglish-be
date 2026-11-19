@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsTimeZone,
   IsArray,
   IsDateString,
   IsIn,
@@ -79,4 +80,9 @@ export class UpdateTokenDto {
   @IsOptional()
   @IsBoolean()
   requireExam?: boolean;
+
+  // IANA time zone of the learning day; omitted = Asia/Jakarta on create.
+  @IsOptional()
+  @IsTimeZone()
+  timeZone?: string;
 }

@@ -26,6 +26,7 @@ const admin = {
   expiresAt: null,
   revokedAt: null,
   lastUsedAt: null,
+  timeZone: 'Asia/Jakarta',
   createdAt: new Date(),
 };
 
@@ -325,6 +326,34 @@ describe('AdminTokensService', () => {
     expect(data).not.toHaveProperty('requireExam');
   });
 
+  it('timeZone: Asia/Jakarta unless chosen, changed only when named', async () => {
+    const a = setup();
+    await a.service.create({
+      label: 'X',
+      menus: ['vocab'],
+      levels: ['pre'],
+      maxDevices: 1,
+    } as any);
+    expect(createdData(a.prisma).timeZone).toBe('Asia/Jakarta');
+    const b = setup();
+    await b.service.create({
+      label: 'X',
+      menus: ['vocab'],
+      levels: ['pre'],
+      maxDevices: 1,
+      timeZone: 'Asia/Makassar',
+    } as any);
+    expect(createdData(b.prisma).timeZone).toBe('Asia/Makassar');
+    const c = setup();
+    await c.service.update('adm1', { label: 'Y' });
+    const data = (
+      c.prisma.accessToken.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      }
+    ).data;
+    expect(data).not.toHaveProperty('timeZone');
+  });
+
   it('summary reads the placement result and exam history', () => {
     expect(examStats(undefined)).toEqual({ placement: null, examAttempts: [] });
     const r = examStats({
@@ -437,7 +466,9 @@ describe('AdminTokensService', () => {
       now.getTime() - 86400000,
     );
     expect(rows[1]).toMatchObject({ id: 'l2', level: null, retention: null });
-    expect(rows[1].lastActiveAt).toEqual(new Date(Date.UTC(2026, 10, 10)));
+    // Only opened the app: not "active".
+    expect(rows[1].lastActiveAt).toBeNull();
+    expect(rows[1].lastOpenedAt).toEqual(new Date(Date.UTC(2026, 10, 10)));
   });
 
   it('404s on an unknown token', async () => {

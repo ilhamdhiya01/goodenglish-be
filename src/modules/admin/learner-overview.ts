@@ -11,6 +11,7 @@ const obj = (v: unknown): Obj =>
 const num = (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v) ? v : 0;
 
+/** UTC day number (kept for callers without a time zone). */
 export const todayDay = (now = Date.now()) => Math.floor(now / DAY_MS);
 
 /** Blocks of Rencana done that day (plan.days[day] = { b1, b2, b3 }). */

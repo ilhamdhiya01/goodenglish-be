@@ -199,18 +199,18 @@ describe('ListeningService', () => {
   describe('admin edit, publish, delete', () => {
     it('validates the edited content as a whole', async () => {
       const { service, prisma } = setup();
-      await service.update('i1', { title: 'New title', week: 4 }, 'Admin');
+      await service.update('i1', { title: 'New title', week: 4 });
       expect(prisma.listeningItem.update.mock.calls[0][0].data).toMatchObject({
         title: 'New title',
         week: 4,
         wordCount: 60,
       });
+      // Editing keeps who made it.
+      expect(
+        prisma.listeningItem.update.mock.calls[0][0].data,
+      ).not.toHaveProperty('createdBy');
       await expect(
-        service.update(
-          'i1',
-          { lines: [{ speaker: 'A', text: 'too short' }] },
-          'Admin',
-        ),
+        service.update('i1', { lines: [{ speaker: 'A', text: 'too short' }] }),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
     });
 
