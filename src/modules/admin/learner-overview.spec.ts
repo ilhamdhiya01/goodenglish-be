@@ -1,4 +1,10 @@
-import { learnerRow, mondayOf, streakOf, todayDay } from './learner-overview';
+import {
+  dayCounts,
+  learnerRow,
+  mondayOf,
+  streakOf,
+  todayDay,
+} from './learner-overview';
 
 // 2026-11-18 is a Wednesday.
 const WED = todayDay(Date.UTC(2026, 10, 18, 12));
@@ -62,5 +68,19 @@ describe('learner overview', () => {
       reviews28d: 0,
       level: null,
     });
+  });
+});
+
+describe('new Rencana days (v2)', () => {
+  it('use their own verdict; older days keep the old rule', () => {
+    const WED = 20411;
+    const days = {
+      [WED - 2]: { b1: true, b2: true, b3: true }, // old day, done
+      [WED - 1]: { v2: true, s: true, ulang: true }, // new day, streak
+      [WED]: { v2: true, s: false, ulang: true, kata: true }, // not yet
+    };
+    expect(dayCounts(days, WED - 1)).toBe(true);
+    expect(dayCounts(days, WED)).toBe(false);
+    expect(streakOf(days, WED)).toBe(2);
   });
 });
