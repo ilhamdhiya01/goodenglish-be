@@ -15,14 +15,22 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { RENCANA } from '../../../common/rencana.config';
 import {
   LEVEL_WIRE_VALUES,
   type LevelWire,
 } from '../../../common/token/access-enums';
 import { STT_LANGUAGES, type SttLanguage } from '../../stt/stt.service';
 
-// A session ends after this many learner turns (spec: "setelah 12 giliran").
-export const MAX_USER_TURNS = 12;
+// A full session ends after this many learner turns ("setelah 12
+// giliran"); a short practice after RENCANA.roleplayShortTurns.
+export const MAX_USER_TURNS = RENCANA.roleplayFullTurns;
+export const ROLEPLAY_MODES = ['penuh', 'pendek'] as const;
+export type RoleplayMode = (typeof ROLEPLAY_MODES)[number];
+export const turnsOfMode = (mode: RoleplayMode | undefined) =>
+  mode === 'pendek' ? RENCANA.roleplayShortTurns : RENCANA.roleplayFullTurns;
+export const modeOfTurns = (maxTurns: number): RoleplayMode =>
+  maxTurns < RENCANA.roleplayFullTurns ? 'pendek' : 'penuh';
 // "Bantu aku" calls per session.
 export const MAX_HELP = 6;
 // Spoken answers written down (stt service) per session: one per turn,
@@ -89,6 +97,11 @@ export class StartRoleplayDto {
   @ValidateNested()
   @Type(() => RoleplayContextDto)
   context!: RoleplayContextDto;
+
+  // Full session (12 turns, default) or short practice (6 turns).
+  @IsOptional()
+  @IsIn(ROLEPLAY_MODES)
+  mode?: RoleplayMode;
 }
 
 export class RoleplayLineDto {
@@ -156,6 +169,8 @@ export class RoleplayStartedDto {
   reply!: string;
   // Sessions left today after this one; null = unlimited.
   remaining!: number | null;
+  mode!: RoleplayMode;
+  maxTurns!: number;
 
   constructor(partial: Partial<RoleplayStartedDto>) {
     Object.assign(this, partial);
@@ -212,6 +227,7 @@ export class RoleplaySummaryDto {
   durationSec!: number;
   userTurns!: number;
   stepsDone!: number[];
+  mode!: RoleplayMode;
 
   constructor(partial: Partial<RoleplaySummaryDto>) {
     Object.assign(this, partial);

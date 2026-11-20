@@ -53,6 +53,7 @@ const row = (o: object = {}) => ({
   context: ctx,
   stepsDone: [] as number[],
   userTurns: 0,
+  maxTurns: 12,
   helpCount: 0,
   transcribeCount: 0,
   startedAt: new Date(Date.now() - 5 * 60_000),
@@ -134,6 +135,8 @@ describe('RoleplayService', () => {
         id: 's1',
         reply: 'Hi! What can I get you?',
         remaining: 2,
+        mode: 'penuh',
+        maxTurns: 12,
       });
       const req = generateContent.mock.calls[0][0] as {
         contents: unknown;
@@ -218,6 +221,55 @@ describe('RoleplayService', () => {
         service.start(access(), { scenarioId: 'order', context: ctx }),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('short practice', () => {
+    it('starts with 6 turns when asked', async () => {
+      const { service, prisma } = setup({ today: 0 });
+      generateContent.mockResolvedValue(
+        reply({ reply: 'Hi', steps_done: [], mission_complete: false }),
+      );
+      const r = await service.start(access(), {
+        scenarioId: 'order',
+        context: ctx,
+        mode: 'pendek',
+      });
+      expect(r).toMatchObject({ mode: 'pendek', maxTurns: 6 });
+      expect(prisma.roleplaySession.create.mock.calls[0][0].data.maxTurns).toBe(
+        6,
+      );
+    });
+
+    it('refuses a 7th turn in a short session, counts what is left', async () => {
+      const seven = lines(
+        ...Array.from(
+          { length: 7 },
+          (_, i) =>
+            [
+              ['ai', `q${i}`],
+              ['user', `a${i}`],
+            ] as ['ai' | 'user', string][],
+        ).flat(),
+      );
+      const { service } = setup({ session: { maxTurns: 6, userTurns: 6 } });
+      await expect(
+        service.turn(access(), 's1', { transcript: seven }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+      const two = lines(
+        ['ai', 'Hi'],
+        ['user', 'a'],
+        ['ai', 'b'],
+        ['user', 'c'],
+      );
+      const short = setup({ session: { maxTurns: 6, userTurns: 1 } });
+      generateContent.mockResolvedValue(
+        reply({ reply: 'Ok', steps_done: [], mission_complete: false }),
+      );
+      await expect(
+        short.service.turn(access(), 's1', { transcript: two }),
+      ).resolves.toMatchObject({ userTurns: 2, turnsLeft: 4 });
     });
   });
 

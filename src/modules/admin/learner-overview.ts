@@ -24,11 +24,23 @@ const weekend = (d: number) => {
 };
 
 /**
- * Days in a row with the day's Rencana done (weekdays ≥ 3 blocks, weekends
- * ≥ 1). Today counts once it's done; otherwise counting starts yesterday.
+ * Whether the day counts for the streak. Days written by the new Rencana
+ * carry `v2: true` and their own verdict `s` (computed in the app from the
+ * activity log); older days keep the old rule (weekdays ≥ 3 blocks,
+ * weekends ≥ 1). Same rule as the app's streak.helper.
+ */
+export const dayCounts = (planDays: Obj, d: number) => {
+  const day = obj(planDays[String(d)]);
+  if (day.v2 === true) return day.s === true;
+  return blocksOn(planDays, d) >= (weekend(d) ? 1 : 3);
+};
+
+/**
+ * Days in a row with the day's Rencana done. Today counts once it's done;
+ * otherwise counting starts yesterday.
  */
 export const streakOf = (planDays: Obj, today: number) => {
-  const ok = (d: number) => blocksOn(planDays, d) >= (weekend(d) ? 1 : 3);
+  const ok = (d: number) => dayCounts(planDays, d);
   let streak = 0;
   for (let d = ok(today) ? today : today - 1; d > today - 400; d--) {
     if (!ok(d)) break;
