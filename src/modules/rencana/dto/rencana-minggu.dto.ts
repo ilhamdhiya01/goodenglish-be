@@ -6,7 +6,6 @@ import {
   Matches,
   Max,
   Min,
-  ValidateIf,
 } from 'class-validator';
 import { RENCANA } from '../../../common/rencana.config';
 import {
@@ -30,13 +29,11 @@ export class PutRencanaMingguDto {
   week!: number;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
   @IsString()
   @Matches(/^[a-z0-9_-]{1,40}$/, { message: 'rencana_bad_scenario' })
   scenarioId?: string | null;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
   @IsIn(RENCANA.grammarTopics, { message: 'rencana_bad_topic' })
   grammarTopic?: string | null;
 }

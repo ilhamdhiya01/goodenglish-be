@@ -5,12 +5,12 @@ import {
   IsArray,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
   Max,
   Min,
-  ValidateNested,
 } from 'class-validator';
 import { RENCANA } from '../../../common/rencana.config';
 import {
@@ -70,12 +70,13 @@ export class LaporanItemDto {
 }
 
 export class PostLaporanDto {
+  // Each item is checked in the service (LaporanItemDto) and a bad one is
+  // dropped alone: a rejected batch would be retried by the app forever.
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(RENCANA.reportBatchMax)
-  @ValidateNested({ each: true })
-  @Type(() => LaporanItemDto)
-  items!: LaporanItemDto[];
+  @IsObject({ each: true })
+  items!: object[];
 }
 
 export class LaporanQueryDto {

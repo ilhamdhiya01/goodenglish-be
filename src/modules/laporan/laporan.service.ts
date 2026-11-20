@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { dayIn, PILOT } from '../../common/pilot.config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RENCANA } from '../../common/rencana.config';
@@ -33,6 +35,8 @@ const dataOf = (d: unknown): Prisma.InputJsonValue | undefined => {
 // is ever updated or deleted.
 @Injectable()
 export class LaporanService {
+  private readonly logger = new Logger(LaporanService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private today(access: AccessContext, now = Date.now()) {
@@ -41,18 +45,26 @@ export class LaporanService {
 
   /**
    * Saves a batch. A day after today (a device clock running ahead) is taken
-   * as today; reports older than reportMaxAgeDays are dropped. Returns how
-   * many were new.
+   * as today; reports older than reportMaxAgeDays, or invalid ones, are
+   * dropped. Returns how many were new.
    */
   async add(
     access: AccessContext,
-    items: LaporanItemDto[],
+    items: object[],
     now = Date.now(),
   ): Promise<{ saved: number }> {
     const today = this.today(access, now);
     const oldest = today - RENCANA.reportMaxAgeDays;
     const rows = items
-      .filter((i) => i.day >= oldest)
+      .map((o) => plainToInstance(LaporanItemDto, o))
+      .filter((i) => {
+        const [e] = validateSync(i);
+        if (e)
+          this.logger.warn(
+            `laporan dropped: ${e.property} ${Object.values(e.constraints ?? {}).join(', ')}`,
+          );
+        return !e && i.day >= oldest;
+      })
       .map((i) => ({
         id: i.id,
         accessTokenId: access.tokenId,

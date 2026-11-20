@@ -73,6 +73,23 @@ describe('LaporanService', () => {
     expect(activityReport.createMany.mock.calls[0][0].data[0].day).toBe(TODAY);
   });
 
+  it('drops a bad item alone, so the batch is not refused', async () => {
+    const { service, activityReport } = setup();
+    const res = await service.add(
+      access,
+      [
+        item({ id: 'aaaaaaaa1', skor: 66.5 }),
+        item({ id: 'bbbbbbbb1', week: 0 }),
+        item({ id: 'cccccccc1' }),
+      ],
+      NOW,
+    );
+    expect(res).toEqual({ saved: 1 });
+    expect(activityReport.createMany.mock.calls[0][0].data[0].id).toBe(
+      'cccccccc1',
+    );
+  });
+
   it('drops oversized data, keeps the report', async () => {
     const { service, activityReport } = setup();
     await service.add(
