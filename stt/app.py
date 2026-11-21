@@ -14,7 +14,15 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
-from core import LANGUAGES, NO_SPEECH_MESSAGE, SAMPLE_RATE, Settings, Transcriber
+from core import (
+    LANGUAGES,
+    NO_SPEECH_MESSAGE,
+    NOT_ENGLISH_MESSAGE,
+    SAMPLE_RATE,
+    NotEnglish,
+    Settings,
+    Transcriber,
+)
 
 log = logging.getLogger("stt")
 logging.basicConfig(
@@ -76,7 +84,12 @@ def create_app(transcriber: Optional[object] = None, settings: Optional[Settings
         return {"ok": state["t"] is not None, "model": s.model}
 
     @app.post("/api/transcribe")
-    async def transcribe(audio: UploadFile = File(...), language: str = Form("en")):
+    async def transcribe(
+        audio: UploadFile = File(...),
+        language: str = Form("en"),
+        # The phrase the learner should say, when known (see core.transcribe).
+        hint: str = Form(""),
+    ):
         if language not in LANGUAGES:
             raise err(422, "bad_language", "Bahasa harus en atau id.")
         t = state["t"]
@@ -106,7 +119,11 @@ def create_app(transcriber: Optional[object] = None, settings: Optional[Settings
                 duration = len(samples) / SAMPLE_RATE
                 if duration > s.max_sec + 0.5:
                     raise err(422, "too_long", "Rekaman terlalu panjang (maksimal 60 detik).")
-                text = await run_in_threadpool(t.transcribe, samples, language)
+                try:
+                    text = await run_in_threadpool(t.transcribe, samples, language, hint)
+                except NotEnglish as e:
+                    log.info("not english lang=%s audio=%.1fs", e, duration)
+                    raise err(422, "not_english", NOT_ENGLISH_MESSAGE)
                 took = time.perf_counter() - started
         finally:
             try:
@@ -116,8 +133,8 @@ def create_app(transcriber: Optional[object] = None, settings: Optional[Settings
 
         # Never the transcript itself: only its shape and the timing.
         log.info(
-            "transcribed lang=%s audio=%.1fs took=%.2fs bytes=%d chars=%d",
-            language, duration, took, size, len(text),
+            "transcribed lang=%s audio=%.1fs took=%.2fs bytes=%d chars=%d hint=%s",
+            language, duration, took, size, len(text), bool(hint.strip()),
         )
         if not text:
             raise err(422, "no_speech", NO_SPEECH_MESSAGE)

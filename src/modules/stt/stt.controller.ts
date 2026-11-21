@@ -16,7 +16,8 @@ import { SttTranscribeDto, SttTranscriptionDto } from './dto/transcribe.dto';
 import { STT_MAX_BYTES, SttService, type UploadedAudio } from './stt.service';
 
 // Speech-to-text outside Main peran: answering a "Betulkan kalimat" card in
-// Ulang by voice (multipart `audio` + `language`). The audio is only passed
+// Ulang, or saying an expression for "Tandai hafal" in Kosakata, by voice
+// (multipart `audio` + `language`, optional `hint`). The audio is only passed
 // through, never stored.
 @Controller('stt')
 @AccessAuth()
@@ -37,7 +38,7 @@ export class SttController {
     @Body() dto: SttTranscribeDto,
   ): Promise<SttTranscriptionDto> {
     return new SttTranscriptionDto(
-      await this.stt.transcribeForReview(access, file, dto.language),
+      await this.stt.transcribeForReview(access, file, dto.language, dto.hint),
     );
   }
 }

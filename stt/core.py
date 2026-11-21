@@ -67,6 +67,28 @@ HALLUCINATION_PREFIXES = (
 
 NO_SPEECH_MESSAGE = "Suaramu tidak terdengar, coba lagi ya."
 
+NOT_ENGLISH_MESSAGE = "Kedengarannya bukan bahasa Inggris. Ucapkan dalam bahasa Inggris, ya."
+
+
+class NotEnglish(Exception):
+    """Checking an English phrase, but the learner spoke another language."""
+
+
+def sounds_not_english(top: str, top_prob: float, probs: dict) -> bool:
+    """Forced to English, Whisper translates other speech instead of failing
+    ("Saya mau pesan dua kopi" → "I want to order two coffees"), so a
+    learner could pass an English phrase by saying it in Indonesian. Clearly
+    another language: the top guess isn't English with ≥ 0.5, and English
+    itself is under 0.2. Deliberately loose so accented English still counts
+    (on the sample clips English is ≥ 0.96, Indonesian sentences 0.00)."""
+    return top != "en" and top_prob >= 0.5 and probs.get("en", 0.0) < 0.2
+
+
+# A hint is the phrase the learner is expected to say (Kosakata's "Tandai
+# hafal" asks them to say an expression). It switches transcribe() to
+# checking: a neutral prompt and a language check. Never fed to the model.
+HINT_MAX_CHARS = 200
+
 
 def env_int(name: str, default: int) -> int:
     try:
@@ -170,13 +192,26 @@ class Transcriber:
             download_root=s.models_dir,
         )
 
+    def assert_english(self, audio) -> None:
+        """Raises NotEnglish when the speech is clearly another language."""
+        try:
+            top, prob, probs = self.model.detect_language(audio, vad_filter=True)
+        except Exception:
+            # e.g. nothing left after VAD: transcribe() reports no speech.
+            return
+        if sounds_not_english(top, prob, dict(probs)):
+            raise NotEnglish(top)
+
     def decode(self, path: str):
         """16 kHz mono float32 samples (any format ffmpeg/PyAV reads)."""
         from faster_whisper import decode_audio
 
         return decode_audio(path, sampling_rate=SAMPLE_RATE)
 
-    def transcribe(self, audio, language: str) -> str:
+    def transcribe(self, audio, language: str, hint: str = "") -> str:
+        hint = hint.strip()[:HINT_MAX_CHARS]
+        if hint and language == "en":
+            self.assert_english(audio)
         segments, _info = self.model.transcribe(
             audio,
             language=language,
@@ -184,7 +219,12 @@ class Transcriber:
             beam_size=self.s.beam_size,
             temperature=0.0,
             condition_on_previous_text=False,
-            initial_prompt=INITIAL_PROMPTS[language],
+            # Checking a known phrase: no "broken English" style prompt (it
+            # pulls short phrases towards learner mistakes). The phrase itself
+            # is NOT given as hotwords: it made Whisper write what was
+            # expected rather than what was said ("wok on" came back as
+            # "worked on", Nov 2026).
+            initial_prompt=None if hint else INITIAL_PROMPTS[language],
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
             without_timestamps=True,

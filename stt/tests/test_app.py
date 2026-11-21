@@ -4,21 +4,25 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from app import Busy, create_app
-from core import NO_SPEECH_MESSAGE, SAMPLE_RATE, Settings
+from core import NO_SPEECH_MESSAGE, NOT_ENGLISH_MESSAGE, SAMPLE_RATE, NotEnglish, Settings
 
 
 class FakeTranscriber:
-    def __init__(self, text="I go to event yesterday", seconds=3.0, bad=False):
-        self.text, self.seconds, self.bad = text, seconds, bad
+    def __init__(self, text="I go to event yesterday", seconds=3.0, bad=False, foreign=False):
+        self.text, self.seconds, self.bad, self.foreign = text, seconds, bad, foreign
         self.calls = []
+        self.hints = []
 
     def decode(self, path):
         if self.bad:
             raise ValueError("not audio")
         return np.zeros(int(self.seconds * SAMPLE_RATE), dtype=np.float32)
 
-    def transcribe(self, samples, language):
+    def transcribe(self, samples, language, hint=""):
         self.calls.append(language)
+        self.hints.append(hint)
+        if self.foreign and hint:
+            raise NotEnglish("id")
         return self.text
 
 
@@ -100,3 +104,28 @@ def test_busy_refuses_beyond_the_queue():
         await busy.__aexit__(None, None, None)
 
     asyncio.run(run())
+
+
+def test_passes_the_expected_phrase_as_a_hint():
+    t = FakeTranscriber(text="What's the weather like?")
+    with client(t) as c:
+        plain = post(c)
+        hinted = c.post(
+            "/api/transcribe",
+            files={"audio": ("a.webm", b"x" * 100, "audio/webm")},
+            data={"language": "en", "hint": "What's the weather like?"},
+        )
+    assert plain.status_code == hinted.status_code == 200
+    assert t.hints == ["", "What's the weather like?"]
+
+
+def test_indonesian_speech_for_an_english_phrase_is_422_not_english():
+    t = FakeTranscriber(text="Can everyone hear me?", foreign=True)
+    with client(t) as c:
+        r = c.post(
+            "/api/transcribe",
+            files={"audio": ("a.webm", b"x" * 100, "audio/webm")},
+            data={"language": "en", "hint": "Can everyone hear me?"},
+        )
+    assert r.status_code == 422
+    assert r.json()["detail"] == {"code": "not_english", "message": NOT_ENGLISH_MESSAGE}

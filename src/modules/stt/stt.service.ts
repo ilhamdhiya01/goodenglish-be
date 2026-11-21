@@ -17,6 +17,8 @@ export type SttLanguage = (typeof STT_LANGUAGES)[number];
 // Same caps as the stt service (stt/core.py), checked here first so an
 // oversized upload never leaves this process.
 export const STT_MAX_BYTES = 5_000_000;
+// Same cap as the stt service's hint (stt/core.py HINT_MAX_CHARS).
+export const STT_HINT_MAX_CHARS = 200;
 
 export interface SttResult {
   text: string;
@@ -41,6 +43,8 @@ const STT_CODES: Record<string, string> = {
   busy: 'stt_busy',
   not_ready: 'stt_busy',
   bad_language: 'stt_bad_language',
+  // A hinted English phrase said in another language (stt/core.py).
+  not_english: 'stt_not_english',
 };
 
 const fail = (status: number, message: string) =>
@@ -104,6 +108,7 @@ export class SttService {
     access: AccessContext,
     file: UploadedAudio | undefined,
     language: SttLanguage = 'en',
+    hint?: string,
   ): Promise<SttResult> {
     if (!access.menus.includes(Menu.REVIEW)) {
       throw new ForbiddenException({
@@ -113,7 +118,7 @@ export class SttService {
     }
     if (!file) throw fail(HttpStatus.UNPROCESSABLE_ENTITY, 'stt_no_speech');
     this.assertRate(access.tokenId);
-    return this.transcribe(file, language);
+    return this.transcribe(file, language, hint);
   }
 
   /** 429 when this token recorded too much in the last minute. */
@@ -123,9 +128,12 @@ export class SttService {
     }
   }
 
+  /** `hint`: the phrase the learner should say, when known; turns on the
+   * stt service's checking mode (see stt/core.py). */
   async transcribe(
     file: UploadedAudio,
     language: SttLanguage,
+    hint?: string,
   ): Promise<SttResult> {
     if (!this.url) {
       throw new ServiceUnavailableException({
@@ -145,6 +153,7 @@ export class SttService {
       file.originalname || 'answer',
     );
     form.append('language', language);
+    if (hint?.trim()) form.append('hint', hint.trim());
 
     let res: Response;
     try {

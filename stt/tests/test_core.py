@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core import Settings, is_hallucination, join_segments, keep_segment
+from core import Settings, is_hallucination, join_segments, keep_segment, sounds_not_english
 
 S = Settings()
 
@@ -58,3 +58,13 @@ def test_a_real_answer_that_overlaps_the_prompt_is_kept():
 def test_empty_is_empty():
     assert join_segments([], "en", S) == ""
     assert join_segments([Seg("  ")], "en", S) == ""
+
+
+def test_clearly_another_language_is_not_english():
+    # Measured on the sample clips (Indonesian sentences vs English ones).
+    assert sounds_not_english("id", 0.85, {"id": 0.85, "ms": 0.13, "en": 0.0})
+    assert not sounds_not_english("en", 0.96, {"en": 0.96})
+    # Accented or very short English: unsure, so it is let through.
+    assert not sounds_not_english("en", 0.26, {"en": 0.26, "id": 0.01})
+    assert not sounds_not_english("ms", 0.55, {"ms": 0.55, "en": 0.3})
+    assert not sounds_not_english("id", 0.4, {"id": 0.4, "en": 0.1})

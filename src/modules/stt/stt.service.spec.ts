@@ -62,11 +62,23 @@ describe('SttService', () => {
     const audio = form.get('audio') as File;
     expect(audio.size).toBe(1000);
     expect(audio.type).toBe('audio/webm;codecs=opus');
+    expect(form.has('hint')).toBe(false);
+  });
+
+  it('passes the expected phrase on as a hint', async () => {
+    fetchMock.mockReturnValue(
+      reply(200, { text: "What's the weather like?", duration_sec: 1.5 }),
+    );
+    await service().transcribe(file(), 'en', "  What's the weather like? ");
+    const form = (fetchMock.mock.calls[0] as [string, RequestInit])[1]
+      .body as FormData;
+    expect(form.get('hint')).toBe("What's the weather like?");
   });
 
   it.each([
     [422, 'no_speech', 422, 'stt_no_speech'],
     [422, 'too_long', 422, 'stt_too_long'],
+    [422, 'not_english', 422, 'stt_not_english'],
     [413, 'too_large', 413, 'stt_too_large'],
     [415, 'bad_audio', 415, 'stt_bad_audio'],
     [503, 'busy', 503, 'stt_busy'],
@@ -143,7 +155,7 @@ describe('transcribeForReview', () => {
     await expect(
       s.transcribeForReview(access(), file(), 'id'),
     ).resolves.toMatchObject({ text: 'She goes.' });
-    expect(spy).toHaveBeenLastCalledWith(expect.anything(), 'id');
+    expect(spy).toHaveBeenLastCalledWith(expect.anything(), 'id', undefined);
     await s.transcribeForReview(access(), file());
     expect(await code(s.transcribeForReview(access(), file()))).toEqual([
       429,
