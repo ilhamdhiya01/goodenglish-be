@@ -73,6 +73,19 @@ describe('parseCheck', () => {
     ).toBe('kesalahan');
   });
 
+  it('keeps a known Cheat sheet rule and drops "none" or unknown ones', () => {
+    const rule = (r: string) =>
+      parseCheck(
+        `{"is_correct": false, "corrected": "She goes home.", "category": "tense", "rule": "${r}"}`,
+      )?.rule;
+    expect(rule('tense/he-she-it-s')).toBe('tense/he-she-it-s');
+    expect(rule('none')).toBeUndefined();
+    expect(rule('tense/made-up')).toBeUndefined();
+    expect(
+      parseCheck('{"is_correct": false, "corrected": "x"}'),
+    ).not.toHaveProperty('rule');
+  });
+
   it('returns null for broken or incomplete blocks', () => {
     expect(parseCheck(null)).toBeNull();
     expect(parseCheck('{"is_correct": fals')).toBeNull();

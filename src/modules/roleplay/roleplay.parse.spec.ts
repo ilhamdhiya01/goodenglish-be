@@ -142,6 +142,23 @@ describe('parseSummary', () => {
     expect(r.corrections[0].category).toBe('kesalahan');
   });
 
+  it('keeps a known Cheat sheet rule, drops "none" and unknown ones', () => {
+    const r = parse({
+      corrections: ['tense/he-she-it-s', 'none', 'made/up'].map((rule) => ({
+        original: 'He go',
+        corrected: 'He goes',
+        explanation_id: 'x',
+        category: 'tense',
+        rule,
+      })),
+    });
+    expect(r.corrections.map((c) => c.rule)).toEqual([
+      'tense/he-she-it-s',
+      undefined,
+      undefined,
+    ]);
+  });
+
   it('drops corrections that only change case or punctuation (speech noise)', () => {
     const r = parse({
       corrections: [

@@ -210,6 +210,8 @@ export class RoleplayCorrectionDto {
   explanation!: string;
   // One of ROLEPLAY_CATEGORIES (the Cheat sheet section ids).
   category!: string;
+  // The Cheat sheet rule it breaks (common/cheat-rules.ts), when one fits.
+  rule?: string;
 }
 
 export class RoleplayNaturalDto {

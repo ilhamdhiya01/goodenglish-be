@@ -1,3 +1,4 @@
+import { ruleOrNone } from '../../common/cheat-rules';
 import {
   FALLBACK_CATEGORY,
   ROLEPLAY_CATEGORY_IDS,
@@ -101,6 +102,7 @@ export const parseSummary = (
     .map((c) => (c && typeof c === 'object' ? (c as Obj) : {}))
     .map((c) => {
       const category = str(c.category) as RoleplayCategory;
+      const rule = ruleOrNone(c.rule);
       return {
         original: str(c.original),
         corrected: str(c.corrected),
@@ -108,6 +110,7 @@ export const parseSummary = (
         category: ROLEPLAY_CATEGORY_IDS.includes(category)
           ? category
           : FALLBACK_CATEGORY,
+        ...(rule ? { rule } : {}),
       };
     })
     // A "correction" that only changes case or punctuation is exactly the

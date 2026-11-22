@@ -3,9 +3,12 @@
 // sync). Most are Cheat sheet section ids; the id is what's stored, the
 // title is what the model reads.
 export const MISTAKE_CATEGORIES = {
-  'aturan-dasar': 'Lima aturan dasar (subjek + kata kerja, -s untuk he/she/it)',
+  // Described by what the Cheat sheet section actually covers: the -s for
+  // he/she/it lives in "Kapan pakai tense apa", so it's a tense mistake.
+  'aturan-dasar':
+    'Lima aturan dasar (kata kerja atau be wajib ada, bentuk kata kerja setelah be / kata bantu)',
   'am-is-are': 'am / is / are (lupa kata be)',
-  tense: 'Tense (kapan pakai tense apa)',
+  tense: 'Tense (kapan pakai tense apa, termasuk -s untuk he/she/it)',
   'sudah-belum': 'Sudah, belum, pernah (present perfect)',
   pasif: 'Kalimat pasif (di-)',
   pertanyaan: 'Membuat pertanyaan & kalimat negatif',

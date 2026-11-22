@@ -4,6 +4,12 @@ import {
   categoryOrFallback,
   type MistakeCategory,
 } from '../../common/mistake-categories';
+import {
+  NO_RULE,
+  cheatRuleList,
+  ruleOrNone,
+  type CheatRuleId,
+} from '../../common/cheat-rules';
 
 // When the chat checks a learner's English sentence, the model ends its
 // answer with a line `<<<CEK` and one JSON object. The learner never sees
@@ -19,13 +25,17 @@ export interface SentenceCheck {
   corrected: string;
   explanationId: string;
   category: MistakeCategory;
+  /** The Cheat sheet rule the mistake breaks, when one fits. */
+  rule?: CheatRuleId;
 }
 
 /** Prompt lines that ask for the block (part of the chat instruction). */
 export const CHECK_INSTRUCTION = `
 - Khusus saat kamu mengoreksi kalimat bahasa Inggris buatan pelajar (format koreksi di atas), akhiri jawabanmu dengan baris baru berisi persis ${CHECK_MARKER} lalu satu baris JSON:
-  {"original": "kalimat bahasa Inggris pelajar yang kamu cek, persis seperti ditulis", "is_correct": true atau false, "corrected": "kalimat yang benar (sama dengan kalimat pelajar kalau sudah benar)", "explanation_id": "alasan singkat bahasa Indonesia, 1 kalimat", "category": "id kategori"}
+  {"original": "kalimat bahasa Inggris pelajar yang kamu cek, persis seperti ditulis", "is_correct": true atau false, "corrected": "kalimat yang benar (sama dengan kalimat pelajar kalau sudah benar)", "explanation_id": "alasan singkat bahasa Indonesia, 1 kalimat", "category": "id kategori", "rule": "id aturan"}
   "category" wajib salah satu id ini: ${AI_MISTAKE_CATEGORIES.map((id) => `${id} (${MISTAKE_CATEGORIES[id]})`).join('; ')}.
+  "rule" adalah aturan Cheat sheet yang dilanggar kalimat itu, pilih satu id dari daftar ini, atau "${NO_RULE}" bila tidak ada yang benar-benar cocok (jangan memaksakan):
+${cheatRuleList()}
   Bagian ini tidak terlihat pelajar: jangan menyebutnya dan jangan menulis apa pun setelah JSON. Untuk pertanyaan biasa, jangan tulis ${CHECK_MARKER}.`;
 
 /**
@@ -91,6 +101,7 @@ export const parseCheck = (block: string | null): SentenceCheck | null => {
     corrected,
     explanationId,
     category: categoryOrFallback(o.category),
+    ...(ruleOrNone(o.rule) ? { rule: ruleOrNone(o.rule) } : {}),
   };
 };
 

@@ -5,6 +5,11 @@ import {
   MISTAKE_CATEGORIES,
   type MistakeCategory,
 } from '../../common/mistake-categories';
+import {
+  CHEAT_RULE_IDS,
+  NO_RULE,
+  cheatRuleList,
+} from '../../common/cheat-rules';
 import type { RoleplayContextDto } from './dto/roleplay.dto';
 
 // Correction categories: the shared "Buku kesalahanku" list (the model
@@ -116,7 +121,7 @@ The whole transcript follows as the user message. Lines starting with "LEARNER:"
 Rules:
 - The learner's lines come from speech recognition. Do NOT correct anything that may only be a speech-recognition error: spelling, punctuation, capitalisation, homophones, missing or merged small words that are clearly mis-heard.
 - Don't nitpick. Prioritise mistakes that change or blur the meaning, or that are repeated. If the learner made no real mistakes, return an empty corrections list.
-- corrections: at most 5, most important first. "original" is the learner's words exactly as written; "corrected" is the fixed version, changing as little as possible; "explanation_id" is a short reason in Indonesian (1–2 sentences, no jargon without explaining it); "category" is the id of the best matching category below.
+- corrections: at most 5, most important first. "original" is the learner's words exactly as written; "corrected" is the fixed version, changing as little as possible; "explanation_id" is a short reason in Indonesian (1–2 sentences, no jargon without explaining it); "category" is the id of the best matching category below; "rule" is the id of the Cheat sheet rule it breaks from the rule list below, or "${NO_RULE}" when none truly fits (don't force one).
 - more_natural: at most 2 learner lines that were correct but would sound more natural another way.
 - key_phrases_used: the key phrases from the list above that the learner actually used, even loosely (with other words filled in). Copy each one exactly as written in the list.
 - summary_id: 1–2 encouraging sentences in Indonesian about how the conversation went. No scores or numbers.
@@ -125,7 +130,10 @@ Rules:
 Categories (id: title):
 ${Object.entries(ROLEPLAY_CATEGORIES)
   .map(([id, t]) => `${id}: ${t}`)
-  .join('\n')}`;
+  .join('\n')}
+
+Rules (id (title)):
+${cheatRuleList()}`;
 
 export const SUMMARY_SCHEMA = {
   type: 'object',
@@ -142,8 +150,15 @@ export const SUMMARY_SCHEMA = {
           corrected: { type: 'string' },
           explanation_id: { type: 'string' },
           category: { type: 'string', enum: ROLEPLAY_CATEGORY_IDS },
+          rule: { type: 'string', enum: [...CHEAT_RULE_IDS, NO_RULE] },
         },
-        required: ['original', 'corrected', 'explanation_id', 'category'],
+        required: [
+          'original',
+          'corrected',
+          'explanation_id',
+          'category',
+          'rule',
+        ],
       },
     },
     more_natural: {
