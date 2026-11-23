@@ -40,6 +40,7 @@ const setup = (token: unknown, activeSessions = 0) => {
       create: jest.fn().mockResolvedValue({ id: 'sess1' }),
     },
     accessToken: { update: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const prisma = {
     accessToken: { findUnique: jest.fn().mockResolvedValue(token) },
@@ -124,6 +125,21 @@ describe('AuthService.redeem', () => {
       ConflictException,
     );
     expect(tx.tokenSession.create).not.toHaveBeenCalled();
+  });
+
+  // Two sign-ins at once must not both see a free slot: the token row is
+  // locked before the sessions are counted.
+  it('locks the token row before counting its devices', async () => {
+    const { service, tx } = setup(makeToken());
+    await service.redeem(PLAIN, 'x');
+    const [sql, id] = tx.$queryRaw.mock.calls[0] as [string[], string];
+    expect(sql.join('?')).toMatch(
+      /FROM access_tokens WHERE id = \? FOR UPDATE/,
+    );
+    expect(id).toBe('tok1');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.tokenSession.count.mock.invocationCallOrder[0],
+    );
   });
 
   it('replaces this browser’s previous session instead of using a new slot', async () => {

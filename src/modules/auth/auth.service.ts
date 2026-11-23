@@ -79,6 +79,9 @@ export class AuthService {
     const expiresAt = new Date(now.getTime() + this.sessionDays * DAY_MS);
 
     const session = await this.prisma.$transaction(async (tx) => {
+      // Sign-ins of one token wait for each other here, so two at once
+      // can't both count a free device slot and both take it.
+      await tx.$queryRaw`SELECT 1 FROM access_tokens WHERE id = ${token.id} FOR UPDATE`;
       if (previousSessionId) {
         await tx.tokenSession.updateMany({
           where: {
