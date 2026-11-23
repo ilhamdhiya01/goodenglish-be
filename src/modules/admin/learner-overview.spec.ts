@@ -1,13 +1,7 @@
-import {
-  dayCounts,
-  learnerRow,
-  mondayOf,
-  streakOf,
-  todayDay,
-} from './learner-overview';
+import { dayCounts, learnerRow, mondayOf, streakOf } from './learner-overview';
 
 // 2026-11-18 is a Wednesday.
-const WED = todayDay(Date.UTC(2026, 10, 18, 12));
+const WED = Math.floor(Date.UTC(2026, 10, 18, 12) / 86_400_000);
 const full = { b1: true, b2: true, b3: true };
 
 describe('learner overview', () => {
@@ -82,5 +76,18 @@ describe('new Rencana days (v2)', () => {
     expect(dayCounts(days, WED - 1)).toBe(true);
     expect(dayCounts(days, WED)).toBe(false);
     expect(streakOf(days, WED)).toBe(2);
+  });
+
+  // The app writes today's record as soon as it opens: only a finished step
+  // is learning, not the record's own markers.
+  it('a day with no step done is not activity', () => {
+    const opened = {
+      PLAN: { days: { [WED]: { v2: true, s: false, ulang: false } } },
+    };
+    expect(learnerRow(opened, WED).lastActivityDay).toBeNull();
+    const done = {
+      PLAN: { days: { [WED]: { v2: true, s: false, ulang: true } } },
+    };
+    expect(learnerRow(done, WED).lastActivityDay).toBe(WED);
   });
 });
