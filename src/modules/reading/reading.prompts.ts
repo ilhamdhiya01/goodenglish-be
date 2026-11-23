@@ -51,6 +51,24 @@ LENGTH: the English text must have ${min}–${max} words. Write exactly ${shape.
 - "title": short English title (max 6 words).`;
 };
 
+// Bacaan harian: made by the server each day, any topic, no week vocabulary.
+// Length is a guide only (no warnings); recent titles keep topics from repeating.
+export const dailyInstruction = (level: LevelWire, recent: string[]): string =>
+  `You write a short graded reading text for Indonesian learners of English.
+
+Level: ${LEVEL_TEXT[level]}.
+Topic: free, something interesting from everyday life, the world, science, culture, work or people.${recent.length ? ` Pick a topic different from these recent texts: ${recent.join('; ')}.` : ''}
+
+- About 150–250 words in 4–6 paragraphs, 3–5 sentences each.
+- Words and sentences suited to the level; the English must be correct and natural.
+- "target_words_used": an empty array.
+- "paragraphs": each item has "en" (the English paragraph) and "id" (a natural Indonesian translation of that paragraph).
+- "glossary": words in the text that may be hard at this level (at most 10), each with "meaning_id" (short Indonesian meaning in this context).
+- "mcq": exactly 3 comprehension questions in simple English, each with 4 different "options", "answer_index" (0-based) and "explanation_id" (Indonesian, quoting the text).
+- "true_false": one "statement" about the text, boolean "answer", "explanation_id" (Indonesian).
+- "find_word": "prompt_id" in Indonesian ("Temukan kata di teks yang artinya …") and "answer_word": that word exactly as it appears in the text.
+- "title": short English title (max 6 words).`;
+
 const str = { type: 'string' } as const;
 
 export const GENERATE_SCHEMA = {

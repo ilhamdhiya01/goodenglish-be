@@ -3,19 +3,25 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { startHourly, weeklyOrRecent } from '../../common/daily-content';
 import { assertLevelOpen } from '../../common/levels/effective-levels';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   LEVEL_WIRE,
+  LEVEL_WIRE_VALUES,
   levelFromDb,
   type LevelWire,
 } from '../../common/token/access-enums';
 import type { AccessContext } from '../../common/types/access-context';
 import { Menu } from '../../generated/prisma/enums';
 import type { Prisma, ReadingText } from '../../generated/prisma/client';
+import { jakartaDay } from '../ai/ai-quota.service';
 import { GeminiJsonService } from '../ai/gemini-json.service';
 import {
   AdminListQueryDto,
@@ -31,7 +37,11 @@ import {
   type ReadingQuestion,
   type ReadingWarning,
 } from './reading.parse';
-import { GENERATE_SCHEMA, generateInstruction } from './reading.prompts';
+import {
+  GENERATE_SCHEMA,
+  dailyInstruction,
+  generateInstruction,
+} from './reading.prompts';
 
 export const assertReading = (access: AccessContext): void => {
   if (!access.menus.includes(Menu.READING)) {
@@ -55,6 +65,7 @@ const toDto = (t: ReadingText) =>
     warnings: t.warnings as unknown as ReadingWarning[],
     createdBy: t.createdBy,
     publishedAt: t.publishedAt,
+    day: t.day ? t.day.toISOString().slice(0, 10) : null,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   });
@@ -93,11 +104,22 @@ const unprocessable = (err: unknown) =>
 // drafts with Gemini, edit, publish and delete; learners read published
 // texts only. Drafts that miss a content rule are kept with `warnings`.
 @Injectable()
-export class ReadingService {
+export class ReadingService implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger(ReadingService.name);
+  private timer?: NodeJS.Timeout;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiJsonService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    this.timer = startHourly(() => this.generateDaily(), this.logger);
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.timer);
+  }
 
   // Learner: published texts of one level the token may open.
   async listPublished(
@@ -107,7 +129,11 @@ export class ReadingService {
     assertReading(access);
     await assertLevelOpen(this.prisma, access, level);
     const texts = await this.prisma.readingText.findMany({
-      where: { level: LEVEL_WIRE[level], status: 'PUBLISHED' },
+      where: {
+        level: LEVEL_WIRE[level],
+        status: 'PUBLISHED',
+        ...weeklyOrRecent(),
+      },
       orderBy: [{ week: 'asc' }, { slot: 'asc' }, { publishedAt: 'asc' }],
     });
     return texts.map(toDto);
@@ -117,7 +143,7 @@ export class ReadingService {
     const texts = await this.prisma.readingText.findMany({
       where: {
         ...(q.level ? { level: LEVEL_WIRE[q.level] } : {}),
-        ...(q.week ? { week: q.week } : {}),
+        ...(q.week !== undefined ? { week: q.week } : {}),
         ...(q.status
           ? { status: q.status === 'published' ? 'PUBLISHED' : 'DRAFT' }
           : {}),
@@ -175,6 +201,66 @@ export class ReadingService {
     return toDto(text);
   }
 
+  // Bacaan harian: one published text per level for today (WIB), any topic.
+  // Published without review, as asked; admins can still hide or delete it.
+  async generateDaily(): Promise<void> {
+    const day = jakartaDay();
+    for (const level of LEVEL_WIRE_VALUES) {
+      const has = await this.prisma.readingText.findFirst({
+        where: { level: LEVEL_WIRE[level], day },
+        select: { id: true },
+      });
+      if (has) continue;
+      const recent = await this.prisma.readingText.findMany({
+        where: { level: LEVEL_WIRE[level], day: { not: null } },
+        orderBy: { day: 'desc' },
+        take: 14,
+        select: { title: true },
+      });
+      const ask = async () => {
+        const parsed = parseGenerated(
+          await this.gemini.generate(
+            dailyInstruction(
+              level,
+              recent.map((r) => r.title),
+            ),
+            [{ role: 'user', parts: [{ text: 'Write the text now.' }] }],
+            GENERATE_SCHEMA,
+            { maxOutputTokens: 8192, timeoutMs: 90_000 },
+          ),
+          'A',
+          [],
+        );
+        // Length and vocabulary don't matter here; an unanswerable question does.
+        if (parsed.warnings.some((w) => w.code === 'find_word_not_in_text'))
+          throw new Error('find_word not in text');
+        return parsed.content;
+      };
+      try {
+        const content = await ask().catch((err: unknown) => {
+          if (err instanceof HttpException) throw err;
+          return ask();
+        });
+        await this.prisma.readingText.create({
+          data: {
+            level: LEVEL_WIRE[level],
+            week: 0,
+            slot: 'A',
+            day,
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+            createdBy: 'Otomatis',
+            ...contentData(content, []),
+          },
+        });
+      } catch (err) {
+        // Another process made it first (unique level + day): nothing to do.
+        if ((err as { code?: unknown } | null)?.code === 'P2002') continue;
+        this.logger.warn(`Bacaan harian ${level}: ${String(err)}`);
+      }
+    }
+  }
+
   // Editing keeps who made the text (createdBy).
   async update(id: string, dto: UpdateReadingDto): Promise<ReadingTextDto> {
     const cur = toDto(await this.findOrThrow(id));
@@ -203,9 +289,13 @@ export class ReadingService {
     } catch (err) {
       throw unprocessable(err);
     }
+    // A daily text has no length or week-word rules, as when it was made.
+    const warnings = cur.day
+      ? parsed.warnings.filter((w) => w.code === 'find_word_not_in_text')
+      : parsed.warnings;
     const text = await this.prisma.readingText.update({
       where: { id },
-      data: contentData(parsed.content, parsed.warnings),
+      data: contentData(parsed.content, warnings),
     });
     return toDto(text);
   }
@@ -224,6 +314,8 @@ export class ReadingService {
           level: cur.level,
           week: cur.week,
           slot: cur.slot,
+          // Daily texts share week 0: only the same day competes.
+          day: cur.day,
           status: 'PUBLISHED',
           id: { not: id },
         },

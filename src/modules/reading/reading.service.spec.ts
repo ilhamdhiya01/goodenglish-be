@@ -8,6 +8,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { AccessContext } from '../../common/types/access-context';
+import { jakartaDay } from '../ai/ai-quota.service';
 import { ReadingService } from './reading.service';
 import {
   LOOKUPS_PER_MIN,
@@ -154,9 +155,16 @@ describe('ReadingService', () => {
   it('lists only published texts of an allowed level', async () => {
     const { service, prisma } = setup();
     const res = await service.listPublished(access(), 'pre');
-    expect(prisma.readingText.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { level: 'PRE', status: 'PUBLISHED' } }),
-    );
+    const where = (
+      prisma.readingText.findMany.mock.calls[0] as unknown as [
+        { where: { OR: { day: null | { gte: Date } }[] } },
+      ]
+    )[0].where;
+    expect(where).toMatchObject({ level: 'PRE', status: 'PUBLISHED' });
+    // Weekly texts always; daily ones from 6 days ago (WIB) on.
+    const from = (where.OR[1].day as { gte: Date }).gte;
+    expect(where.OR[0]).toEqual({ day: null });
+    expect((jakartaDay().getTime() - from.getTime()) / 86_400_000).toBe(6);
     expect(res[0]).toMatchObject({ level: 'pre', slot: 'A', status: 'draft' });
     await expect(
       service.listPublished(access(), 'upper'),
@@ -164,6 +172,15 @@ describe('ReadingService', () => {
     await expect(
       service.listPublished(access({ menus: ['VOCAB'] as never }), 'pre'),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('admin list: week 0 means the daily texts, not every week', async () => {
+    const { service, prisma } = setup();
+    await service.adminList({ level: 'pre', week: 0 });
+    const q = prisma.readingText.findMany.mock.calls[0] as unknown as [
+      { where: object },
+    ];
+    expect(q[0].where).toEqual({ level: 'PRE', week: 0 });
   });
 
   it('generates a draft with its warnings', async () => {
@@ -254,6 +271,17 @@ describe('ReadingService', () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
+  it('editing a daily text keeps it free of length and week-word warnings', async () => {
+    const { service, prisma } = setup();
+    prisma.readingText.findUnique.mockResolvedValue(
+      row({ week: 0, day: new Date('2026-11-23T00:00:00Z'), wordCount: 40 }),
+    );
+    const res = await service.update('r1', {
+      paragraphs: [{ en: 'A short text about busy bees.', id: 'Teks.' }],
+    });
+    expect(res.warnings).toEqual([]);
+  });
+
   it('one published text per slot: 409 reading_slot_taken', async () => {
     const { service, prisma } = setup();
     prisma.readingText.findUnique.mockResolvedValue(row({ status: 'DRAFT' }));
@@ -265,6 +293,20 @@ describe('ReadingService', () => {
     expect((err as HttpException).getResponse()).toMatchObject({
       message: 'reading_slot_taken',
     });
+  });
+
+  // Daily texts are all week 0 / slot A: only the same day may compete.
+  it('the slot check of a daily text looks at its own day only', async () => {
+    const { service, prisma } = setup();
+    const day = new Date('2026-11-23T00:00:00Z');
+    prisma.readingText.findUnique.mockResolvedValue(
+      row({ week: 0, day, status: 'DRAFT' }),
+    );
+    await service.setPublished('r1', true);
+    const q = prisma.readingText.findFirst.mock.calls[0] as unknown as [
+      { where: object },
+    ];
+    expect(q[0].where).toMatchObject({ week: 0, slot: 'A', day });
   });
 
   it('a text with warnings is published only with force', async () => {
@@ -440,5 +482,90 @@ describe('WordLookupService', () => {
         level: 'pre',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('ReadingService › Bacaan harian', () => {
+  const dailyData = (prisma: ReturnType<typeof setup>['prisma']) =>
+    prisma.readingText.create.mock.calls.map(
+      (c) => c[0].data as Record<string, unknown>,
+    );
+
+  it('publishes one text per level for today, any topic, no week words', async () => {
+    const { service, prisma, gemini } = setup();
+    prisma.readingText.findMany.mockResolvedValue([{ title: 'Old topic' }]);
+    await service.generateDaily();
+    const data = dailyData(prisma);
+    expect(data.map((d) => d.level)).toEqual([
+      'BEGINNER',
+      'PRE',
+      'INTER',
+      'UPPER',
+    ]);
+    expect(data[0]).toMatchObject({
+      week: 0,
+      slot: 'A',
+      day: jakartaDay(),
+      status: 'PUBLISHED',
+      createdBy: 'Otomatis',
+      // Length and week words don't matter: no warnings kept.
+      warnings: [],
+    });
+    const prompt = (gemini.generate.mock.calls[0] as unknown as [string])[0];
+    expect(prompt).toContain('Topic: free');
+    expect(prompt).toContain('Old topic');
+    expect(prompt).not.toContain('vocabulary (Kosakata)');
+  });
+
+  it("skips levels that already have today's text", async () => {
+    const { service, prisma, gemini } = setup();
+    prisma.readingText.findFirst.mockImplementation(
+      (a: { where: { level: string } }) =>
+        Promise.resolve(a.where.level === 'PRE' ? { id: 'x' } : null),
+    );
+    await service.generateDaily();
+    expect(dailyData(prisma).map((d) => d.level)).toEqual([
+      'BEGINNER',
+      'INTER',
+      'UPPER',
+    ]);
+    expect(gemini.generate).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries an answer whose find_word is not in the text', async () => {
+    let n = 0;
+    const missing = () => {
+      const o = JSON.parse(good()) as {
+        questions: { type: string; answer?: unknown }[];
+      };
+      o.questions[4].answer = 'zebra';
+      return JSON.stringify(o);
+    };
+    const { service, prisma } = setup(() =>
+      Promise.resolve(n++ === 0 ? missing() : good()),
+    );
+    prisma.readingText.findFirst.mockImplementation(
+      (a: { where: { level: string } }) =>
+        Promise.resolve(a.where.level === 'PRE' ? null : { id: 'x' }),
+    );
+    await service.generateDaily();
+    expect(n).toBe(2);
+    expect(dailyData(prisma)).toHaveLength(1);
+  });
+
+  it('a failure or a race on one level does not stop the others', async () => {
+    const { service, prisma, gemini } = setup();
+    let calls = 0;
+    prisma.readingText.create.mockImplementation((a: { data: object }) => {
+      if (calls++ === 0)
+        throw Object.assign(new Error('dup'), { code: 'P2002' });
+      return row(a.data);
+    });
+    gemini.generate
+      .mockRejectedValueOnce(new ServiceUnavailableException())
+      .mockImplementation(() => Promise.resolve(good()));
+    await expect(service.generateDaily()).resolves.toBeUndefined();
+    // BEGINNER: no key (no retry); PRE: lost the race; INTER, UPPER: made.
+    expect(prisma.readingText.create).toHaveBeenCalledTimes(3);
   });
 });

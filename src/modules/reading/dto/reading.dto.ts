@@ -183,7 +183,8 @@ export class AdminListQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
+  // 0 = Bacaan harian
+  @Min(0)
   @Max(52)
   week?: number;
 
@@ -227,6 +228,8 @@ export class ReadingTextDto {
   warnings!: ReadingWarning[];
   createdBy!: string | null;
   publishedAt!: Date | null;
+  /** Bacaan harian: its WIB day (YYYY-MM-DD); null for weekly A/B texts. */
+  day!: string | null;
   createdAt!: Date;
   updatedAt!: Date;
 

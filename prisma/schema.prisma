@@ -301,9 +301,12 @@ model ListeningItem {
   // Label of the admin token that generated or last saved it.
   createdBy   String?         @db.VarChar(100)
   publishedAt DateTime?
+  // Menyimak harian (WIB day, made by the server, week 0); null = weekly item
+  day         DateTime?       @db.Date
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
+  @@unique([level, day, type])
   @@index([level, week, status])
   @@map("listening_items")
 }
@@ -344,9 +347,12 @@ model ReadingText {
   warnings        Json          @default("[]")
   createdBy       String?       @db.VarChar(100)
   publishedAt     DateTime?
+  // Bacaan harian (WIB day, made by the server, week 0); null = weekly A/B text
+  day             DateTime?     @db.Date
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  @@unique([level, day])
   @@index([level, week, status])
   @@map("reading_texts")
 }

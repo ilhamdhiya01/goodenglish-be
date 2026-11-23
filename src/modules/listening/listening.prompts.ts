@@ -42,6 +42,34 @@ Then write exactly ${QUESTIONS} multiple-choice questions about what was SAID (d
 - "explanation_id": 1 short sentence in Indonesian saying why the answer is right, quoting the key words from the audio.
 - "title": a short English title (max 6 words).`;
 
+// Menyimak harian: made by the server each day, any topic, no week vocabulary.
+// Recent titles keep topics from repeating.
+export const dailyInstruction = (
+  level: LevelWire,
+  type: ListeningTypeWire,
+  recent: string[],
+): string =>
+  `You write listening-comprehension material for Indonesian learners of English.
+
+Level: ${LEVEL_TEXT[level]}.
+Topic: free, from everyday life, travel, work, shopping, health, hobbies or the news.${recent.length ? ` Pick a topic different from these recent items: ${recent.join('; ')}.` : ''}
+
+Write ONE ${
+    type === 'dialog'
+      ? 'short, natural dialogue between two people, speaker "A" and speaker "B", taking turns'
+      : 'monologue: a public announcement or a voice message, all lines by speaker "A"'
+  }.
+- ${MIN_WORDS + 20}–${MAX_WORDS - 20} words in total across all lines (never under ${MIN_WORDS} or over ${MAX_WORDS}).
+- Words and sentences suited to the level. Short sentences. No slang that is hard to hear.
+- It is spoken aloud by a text-to-speech voice: write numbers, times and prices so they read naturally, no emojis, no stage directions.
+- The English must be correct and natural: learners copy what they hear.
+- ${type === 'dialog' ? 'Each line is one turn of 1–2 sentences.' : 'Split the monologue into 3–6 lines of 1–2 sentences each.'}
+
+Then write exactly ${QUESTIONS} multiple-choice questions about what was SAID (details, purpose, what happens next), answerable only by listening:
+- "question" in simple English; exactly ${OPTIONS} "options", one correct, the others plausible; "answer_index" is the 0-based index of the correct option.
+- "explanation_id": 1 short sentence in Indonesian saying why the answer is right, quoting the key words from the audio.
+- "title": a short English title (max 6 words).`;
+
 export const GENERATE_SCHEMA = {
   type: 'object',
   properties: {

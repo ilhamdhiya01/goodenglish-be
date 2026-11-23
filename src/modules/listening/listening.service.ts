@@ -1,19 +1,26 @@
 import {
   ForbiddenException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { startHourly, weeklyOrRecent } from '../../common/daily-content';
 import { assertLevelOpen } from '../../common/levels/effective-levels';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   LEVEL_WIRE,
+  LEVEL_WIRE_VALUES,
   levelFromDb,
   type LevelWire,
 } from '../../common/token/access-enums';
 import type { AccessContext } from '../../common/types/access-context';
 import { Menu } from '../../generated/prisma/enums';
 import type { ListeningItem, Prisma } from '../../generated/prisma/client';
+import { jakartaDay } from '../ai/ai-quota.service';
 import { GeminiJsonService } from '../ai/gemini-json.service';
 import {
   AdminListQueryDto,
@@ -30,6 +37,7 @@ import {
 } from './listening.parse';
 import {
   GENERATE_SCHEMA,
+  dailyInstruction,
   generateInstruction,
   type ListeningTypeWire,
 } from './listening.prompts';
@@ -56,6 +64,7 @@ const toDto = (i: ListeningItem) =>
     wordCount: i.wordCount,
     createdBy: i.createdBy,
     publishedAt: i.publishedAt,
+    day: i.day ? i.day.toISOString().slice(0, 10) : null,
     createdAt: i.createdAt,
     updatedAt: i.updatedAt,
   });
@@ -71,11 +80,24 @@ const contentData = (c: ListeningContent) => ({
 // "Menyimak › Dengar & jawab" question bank. Admins generate drafts with
 // Gemini, edit, publish and delete; learners read published items only.
 @Injectable()
-export class ListeningService {
+export class ListeningService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
+  private readonly logger = new Logger(ListeningService.name);
+  private timer?: NodeJS.Timeout;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiJsonService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    this.timer = startHourly(() => this.generateDaily(), this.logger);
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.timer);
+  }
 
   // Learner: published items of one level the token may open.
   async listPublished(
@@ -86,7 +108,7 @@ export class ListeningService {
     await assertLevelOpen(this.prisma, access, level);
     const lvl = LEVEL_WIRE[level];
     const items = await this.prisma.listeningItem.findMany({
-      where: { level: lvl, status: 'PUBLISHED' },
+      where: { level: lvl, status: 'PUBLISHED', ...weeklyOrRecent() },
       orderBy: [{ week: 'asc' }, { publishedAt: 'asc' }],
     });
     return items.map(toDto);
@@ -96,7 +118,7 @@ export class ListeningService {
     const items = await this.prisma.listeningItem.findMany({
       where: {
         ...(q.level ? { level: LEVEL_WIRE[q.level] } : {}),
-        ...(q.week ? { week: q.week } : {}),
+        ...(q.week !== undefined ? { week: q.week } : {}),
         ...(q.status
           ? { status: q.status === 'published' ? 'PUBLISHED' : 'DRAFT' }
           : {}),
@@ -165,6 +187,66 @@ export class ListeningService {
       items: items.map(toDto),
       failed: results.length - ok.length,
     });
+  }
+
+  // Menyimak harian: one dialog and one monolog per level for today (WIB),
+  // any topic, published without review; admins can still hide or delete.
+  async generateDaily(): Promise<void> {
+    const day = jakartaDay();
+    for (const level of LEVEL_WIRE_VALUES) {
+      for (const type of ['dialog', 'monolog'] as const) {
+        const dbType = type === 'dialog' ? 'DIALOG' : 'MONOLOG';
+        const has = await this.prisma.listeningItem.findFirst({
+          where: { level: LEVEL_WIRE[level], day, type: dbType },
+          select: { id: true },
+        });
+        if (has) continue;
+        const recent = await this.prisma.listeningItem.findMany({
+          where: { level: LEVEL_WIRE[level], day: { not: null } },
+          orderBy: { day: 'desc' },
+          take: 14,
+          select: { title: true },
+        });
+        const ask = async () => {
+          const content = parseGenerated(
+            await this.gemini.generate(
+              dailyInstruction(
+                level,
+                type,
+                recent.map((r) => r.title),
+              ),
+              [{ role: 'user', parts: [{ text: 'Write the item now.' }] }],
+              GENERATE_SCHEMA,
+            ),
+            type,
+          );
+          // The day's slot is per type: the other one would never be filled.
+          if (content.type !== type) throw new Error(`got a ${content.type}`);
+          return content;
+        };
+        try {
+          const content = await ask().catch((err: unknown) => {
+            if (err instanceof HttpException) throw err;
+            return ask();
+          });
+          await this.prisma.listeningItem.create({
+            data: {
+              level: LEVEL_WIRE[level],
+              week: 0,
+              day,
+              status: 'PUBLISHED',
+              publishedAt: new Date(),
+              createdBy: 'Otomatis',
+              ...contentData(content),
+            },
+          });
+        } catch (err) {
+          // Another process made it first (unique level + day + type).
+          if ((err as { code?: unknown } | null)?.code === 'P2002') continue;
+          this.logger.warn(`Menyimak harian ${level} ${type}: ${String(err)}`);
+        }
+      }
+    }
   }
 
   // Editing keeps who made the item (createdBy).
