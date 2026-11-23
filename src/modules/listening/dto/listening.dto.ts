@@ -134,7 +134,8 @@ export class AdminListQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
+  // 0 = Menyimak harian
+  @Min(0)
   @Max(52)
   week?: number;
 
@@ -165,6 +166,8 @@ export class ListeningItemDto {
   wordCount!: number;
   createdBy!: string | null;
   publishedAt!: Date | null;
+  /** Menyimak harian: its WIB day (YYYY-MM-DD); null for weekly items. */
+  day!: string | null;
   createdAt!: Date;
   updatedAt!: Date;
 

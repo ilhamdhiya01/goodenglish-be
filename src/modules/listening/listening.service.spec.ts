@@ -8,6 +8,8 @@ import {
 import type { AccessContext } from '../../common/types/access-context';
 import type { PrismaService } from '../../common/prisma/prisma.service';
 import type { GeminiJsonService } from '../ai/gemini-json.service';
+import { weeklyOrRecent } from '../../common/daily-content';
+import { jakartaDay } from '../ai/ai-quota.service';
 import { ListeningService } from './listening.service';
 
 jest.mock('@nestjs/config', () => ({ ConfigService: class {} }));
@@ -75,6 +77,7 @@ const setup = (opts: { key?: boolean; replies?: (string | Error)[] } = {}) => {
     listeningItem: {
       findMany: jest.fn().mockResolvedValue([row({ status: 'PUBLISHED' })]),
       findUnique: jest.fn().mockResolvedValue(row()),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn(({ data }: { data: object }) =>
         Promise.resolve(row(data)),
       ),
@@ -126,6 +129,8 @@ describe('ListeningService', () => {
       expect(prisma.listeningItem.findMany.mock.calls[0][0].where).toEqual({
         level: 'PRE',
         status: 'PUBLISHED',
+        // Weekly items always; daily ones of the last 7 WIB days.
+        ...weeklyOrRecent(),
       });
       expect(items[0]).toMatchObject({
         level: 'pre',
@@ -234,5 +239,96 @@ describe('ListeningService', () => {
         NotFoundException,
       );
     });
+  });
+});
+
+describe('ListeningService › Menyimak harian', () => {
+  it('admin list: week 0 means the daily items, not every week', async () => {
+    const { service, prisma } = setup();
+    await service.adminList({ level: 'pre', week: 0 });
+    expect(prisma.listeningItem.findMany.mock.calls[0][0].where).toEqual({
+      level: 'PRE',
+      week: 0,
+    });
+  });
+
+  const made = (prisma: ReturnType<typeof setup>['prisma']) =>
+    prisma.listeningItem.create.mock.calls.map(
+      (c) => (c[0] as { data: Record<string, unknown> }).data,
+    );
+  // Gemini answers the type it was asked for.
+  const byType = (gemini: ReturnType<typeof setup>['gemini']) =>
+    gemini.generate.mockImplementation(((instruction: string) =>
+      Promise.resolve(
+        good(instruction.includes('monologue:') ? 'monolog' : 'dialog'),
+      )) as never);
+
+  it('publishes a dialog and a monolog per level for today, any topic', async () => {
+    const { service, prisma, gemini } = setup();
+    byType(gemini);
+    prisma.listeningItem.findMany.mockResolvedValue([{ title: 'Old one' }]);
+    await service.generateDaily();
+    const data = made(prisma);
+    expect(data.map((d) => `${d.level as string} ${d.type as string}`)).toEqual(
+      [
+        'BEGINNER DIALOG',
+        'BEGINNER MONOLOG',
+        'PRE DIALOG',
+        'PRE MONOLOG',
+        'INTER DIALOG',
+        'INTER MONOLOG',
+        'UPPER DIALOG',
+        'UPPER MONOLOG',
+      ],
+    );
+    expect(data[0]).toMatchObject({
+      week: 0,
+      day: jakartaDay(),
+      status: 'PUBLISHED',
+      createdBy: 'Otomatis',
+    });
+    const prompt = (gemini.generate.mock.calls[0] as unknown as [string])[0];
+    expect(prompt).toContain('Topic: free');
+    expect(prompt).toContain('Old one');
+    expect(prompt).not.toContain('vocabulary to use');
+  });
+
+  it('skips what today already has; a wrong type is asked again', async () => {
+    const { service, prisma, gemini } = setup({
+      // Asked for a dialog, got a monolog first.
+      replies: [good('monolog'), good('dialog')],
+    });
+    prisma.listeningItem.findFirst.mockImplementation(((a: {
+      where: { level: string; type: string };
+    }) =>
+      Promise.resolve(
+        a.where.level === 'PRE' && a.where.type === 'DIALOG'
+          ? null
+          : { id: 'x' },
+      )) as never);
+    await service.generateDaily();
+    expect(gemini.generate).toHaveBeenCalledTimes(2);
+    expect(made(prisma)).toEqual([
+      expect.objectContaining({ level: 'PRE', type: 'DIALOG' }),
+    ]);
+  });
+
+  it('a failure or a race on one item does not stop the others', async () => {
+    const { service, prisma, gemini } = setup();
+    byType(gemini);
+    gemini.generate.mockRejectedValueOnce(new ServiceUnavailableException());
+    let calls = 0;
+    prisma.listeningItem.create.mockImplementation(
+      ({ data }: { data: object }) => {
+        if (calls++ === 0)
+          return Promise.reject(
+            Object.assign(new Error('dup'), { code: 'P2002' }),
+          );
+        return Promise.resolve(row(data));
+      },
+    );
+    await expect(service.generateDaily()).resolves.toBeUndefined();
+    // BEGINNER dialog: no key; BEGINNER monolog: lost the race; 6 made.
+    expect(prisma.listeningItem.create).toHaveBeenCalledTimes(7);
   });
 });
