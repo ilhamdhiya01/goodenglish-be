@@ -36,6 +36,8 @@ export const MAX_HELP = 6;
 // Spoken answers written down (stt service) per session: one per turn,
 // plus room for re-recording and retries.
 export const MAX_TRANSCRIBE = 30;
+// End-of-session summaries per session: the first one plus two re-fetches.
+export const MAX_FINISH = 3;
 export const MAX_LINE_CHARS = 600;
 // Opening line + 12 × (learner, AI) and a little slack.
 export const MAX_TRANSCRIPT = 30;

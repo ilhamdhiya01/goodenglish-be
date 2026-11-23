@@ -73,6 +73,7 @@ const setup = (
       delete: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn().mockResolvedValue(row(opts.session)),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   };
   const apiKey = opts.apiKey ?? 'key';
@@ -349,7 +350,7 @@ describe('RoleplayService', () => {
     });
 
     it('refuses a 13th learner turn', async () => {
-      const { service } = setup();
+      const { service } = setup({ session: { userTurns: 12 } });
       const long = Array.from({ length: 13 }, () => [
         { role: 'ai' as const, text: 'Q' },
         { role: 'user' as const, text: 'A' },
@@ -392,6 +393,25 @@ describe('RoleplayService', () => {
         service.turn(access(), 's1', { transcript: lines(['ai', 'Hi']) }),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
     });
+
+    // The server counts the turns: a trimmed transcript can't hide them from
+    // the quota or the turn limit.
+    it('counts the turn on the server, whatever the transcript says', async () => {
+      const { service, prisma } = setup({ session: { userTurns: 5 } });
+      generateContent.mockResolvedValue(
+        reply({ reply: 'Ok', steps_done: [], mission_complete: false }),
+      );
+      const r = await service.turn(access(), 's1', { transcript: t });
+      expect(r).toMatchObject({ userTurns: 6, turnsLeft: 6 });
+      expect(prisma.roleplaySession.update.mock.calls[0][0].data).toMatchObject(
+        { userTurns: 6 },
+      );
+
+      const full = setup({ session: { maxTurns: 6, userTurns: 6 } });
+      await expect(
+        full.service.turn(access(), 's1', { transcript: t }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
   });
 
   describe('help', () => {
@@ -409,16 +429,37 @@ describe('RoleplayService', () => {
         transcript: lines(['ai', 'What can I get you?']),
       });
       expect(r.helpLeft).toBe(3);
-      expect(prisma.roleplaySession.update.mock.calls[0][0].data).toEqual({
-        helpCount: { increment: 1 },
+      expect(prisma.roleplaySession.updateMany.mock.calls[0][0]).toEqual({
+        where: { id: 's1', helpCount: { lt: 6 } },
+        data: { helpCount: { increment: 1 } },
       });
     });
 
     it('stops at the cap', async () => {
-      const { service } = setup({ session: { helpCount: 6 } });
+      const { service, prisma } = setup({ session: { helpCount: 6 } });
+      prisma.roleplaySession.updateMany.mockResolvedValue({ count: 0 });
       await expect(
         service.help(access(), 's1', { transcript: lines(['ai', 'Hi']) }),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    // Taken atomically before Gemini: requests at once can't all slip under.
+    it('takes the slot before Gemini and gives it back when Gemini fails', async () => {
+      const full = setup();
+      full.prisma.roleplaySession.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        full.service.help(access(), 's1', { transcript: lines(['ai', 'Hi']) }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(generateContent).not.toHaveBeenCalled();
+
+      const { service, prisma } = setup();
+      generateContent.mockResolvedValue({ text: '{' });
+      await expect(
+        service.help(access(), 's1', { transcript: lines(['ai', 'Hi']) }),
+      ).rejects.toBeInstanceOf(BadGatewayException);
+      expect(prisma.roleplaySession.updateMany.mock.calls[1][0].data).toEqual({
+        helpCount: { decrement: 1 },
+      });
     });
   });
 
@@ -445,8 +486,9 @@ describe('RoleplayService', () => {
         durationSec: 2.4,
         transcribeLeft: 26,
       });
-      expect(prisma.roleplaySession.update.mock.calls[0][0].data).toEqual({
-        transcribeCount: { increment: 1 },
+      expect(prisma.roleplaySession.updateMany.mock.calls[0][0]).toEqual({
+        where: { id: 's1', transcribeCount: { lt: 30 } },
+        data: { transcribeCount: { increment: 1 } },
       });
       // Gemini is never involved.
       expect(generateContent).not.toHaveBeenCalled();
@@ -463,6 +505,7 @@ describe('RoleplayService', () => {
         setup().service.transcribe(access(), 's1', undefined, {}),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
       const capped = setup({ session: { transcribeCount: 30 } });
+      capped.prisma.roleplaySession.updateMany.mockResolvedValue({ count: 0 });
       await expect(
         capped.service.transcribe(access(), 's1', file, {}),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
@@ -486,6 +529,26 @@ describe('RoleplayService', () => {
         service.transcribe(access(), 's1', file, {}),
       ).rejects.toBeInstanceOf(HttpException);
       expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+    });
+
+    it('takes the slot before the stt service, gives it back on failure', async () => {
+      const full = setup();
+      full.prisma.roleplaySession.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        full.service.transcribe(access(), 's1', file, {}),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(full.stt.transcribe).not.toHaveBeenCalled();
+
+      const { service, prisma, stt } = setup();
+      stt.transcribe.mockRejectedValue(
+        new HttpException({ message: 'stt_no_speech' }, 422),
+      );
+      await expect(
+        service.transcribe(access(), 's1', file, {}),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(prisma.roleplaySession.updateMany.mock.calls[1][0].data).toEqual({
+        transcribeCount: { decrement: 1 },
+      });
     });
   });
 
@@ -559,6 +622,38 @@ describe('RoleplayService', () => {
           durationSec: 5,
         }),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it("a short transcript doesn't lower the server's turn count", async () => {
+      const { service, prisma } = setup({ session: { userTurns: 5 } });
+      generateContent.mockResolvedValue(reply(summary));
+      const r = await service.finish(access(), 's1', {
+        transcript: t,
+        durationSec: 60,
+      });
+      expect(r.userTurns).toBe(5);
+      expect(prisma.roleplaySession.update.mock.calls[0][0].data).toMatchObject(
+        { userTurns: 5 },
+      );
+    });
+
+    // Each summary is a Gemini call: a few fetches per session, no more.
+    it('stops after MAX_FINISH summaries; a failed one gives its slot back', async () => {
+      const full = setup();
+      full.prisma.roleplaySession.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        full.service.finish(access(), 's1', { transcript: t, durationSec: 60 }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(generateContent).not.toHaveBeenCalled();
+
+      const { service, prisma } = setup();
+      generateContent.mockResolvedValue(reply({ summary_id: '' }));
+      await expect(
+        service.finish(access(), 's1', { transcript: t, durationSec: 60 }),
+      ).rejects.toBeInstanceOf(BadGatewayException);
+      expect(prisma.roleplaySession.updateMany.mock.calls[1][0].data).toEqual({
+        finishCount: { decrement: 1 },
+      });
     });
 
     it('is 502 and saves nothing when the summary is malformed', async () => {

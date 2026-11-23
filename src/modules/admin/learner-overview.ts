@@ -11,12 +11,12 @@ const obj = (v: unknown): Obj =>
 const num = (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v) ? v : 0;
 
-/** UTC day number (kept for callers without a time zone). */
-export const todayDay = (now = Date.now()) => Math.floor(now / DAY_MS);
-
-/** Blocks of Rencana done that day (plan.days[day] = { b1, b2, b3 }). */
+/** Blocks / steps of Rencana done that day: { b1, b2, b3 } on old days,
+ * { v2, s, ulang, kata, … } on new ones (v2 and s are markers, not steps). */
 const blocksOn = (planDays: Obj, d: number) =>
-  Object.values(obj(planDays[String(d)])).filter(Boolean).length;
+  Object.entries(obj(planDays[String(d)])).filter(
+    ([k, v]) => k !== 'v2' && k !== 's' && v,
+  ).length;
 
 const weekend = (d: number) => {
   const wd = new Date(d * DAY_MS).getUTCDay();
