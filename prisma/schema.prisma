@@ -259,6 +259,8 @@ model RoleplaySession {
   helpCount       Int         @default(0)
   // Spoken answers written down by Gemini ("Main peran" mic).
   transcribeCount Int         @default(0)
+  // End-of-session summaries fetched (each one is a Gemini call).
+  finishCount     Int         @default(0)
   startedAt       DateTime    @default(now())
   endedAt         DateTime?
   durationSec     Int?

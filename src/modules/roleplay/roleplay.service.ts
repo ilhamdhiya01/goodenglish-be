@@ -21,6 +21,7 @@ import { createGemini } from '../ai/gemini.client';
 import { SttService, type UploadedAudio } from '../stt/stt.service';
 import {
   FinishRoleplayDto,
+  MAX_FINISH,
   MAX_HELP,
   MAX_TRANSCRIBE,
   modeOfTurns,
@@ -184,6 +185,30 @@ export class RoleplayService {
     });
   }
 
+  // Takes one use of a per-session counter atomically, so requests sent at
+  // once can't all pass a check made before the AI call; false when full.
+  private async take(
+    id: string,
+    field: 'helpCount' | 'transcribeCount' | 'finishCount',
+    max: number,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.roleplaySession.updateMany({
+      where: { id, [field]: { lt: max } },
+      data: { [field]: { increment: 1 } },
+    });
+    return count > 0;
+  }
+
+  // A failed call doesn't use the slot up.
+  private giveBack(
+    id: string,
+    field: 'helpCount' | 'transcribeCount' | 'finishCount',
+  ) {
+    return this.prisma.roleplaySession
+      .updateMany({ where: { id }, data: { [field]: { decrement: 1 } } })
+      .catch(() => undefined);
+  }
+
   private quotaExceeded() {
     return new HttpException(
       { field: '', message: 'roleplay_quota_exceeded' },
@@ -285,7 +310,9 @@ export class RoleplayService {
     this.assertOpen(s);
     const last = dto.transcript[dto.transcript.length - 1];
     if (last.role !== 'user') throw fail('roleplay_bad_turn');
-    const userTurns = userTurnsOf(dto.transcript);
+    // Counted here, not from the transcript the client sends (which it could
+    // trim). A failed turn isn't saved, so sending it again isn't counted twice.
+    const userTurns = s.userTurns + 1;
     if (userTurns > s.maxTurns) throw fail('roleplay_turn_limit');
     // Reaching QUOTA_TURNS takes the session off today's quota.
     const limit = access.roleplayDailyLimit;
@@ -328,7 +355,8 @@ export class RoleplayService {
   ): Promise<RoleplayHelpDto> {
     const s = await this.owned(access, id);
     this.assertOpen(s);
-    if (s.helpCount >= MAX_HELP) throw fail('roleplay_help_limit');
+    if (!(await this.take(id, 'helpCount', MAX_HELP)))
+      throw fail('roleplay_help_limit');
     let suggestions: ReturnType<typeof parseHelp>;
     try {
       const raw = await this.generate(
@@ -339,12 +367,9 @@ export class RoleplayService {
       );
       suggestions = parseHelp(raw);
     } catch (err) {
+      await this.giveBack(id, 'helpCount');
       throw this.aiFailed(err);
     }
-    await this.prisma.roleplaySession.update({
-      where: { id },
-      data: { helpCount: { increment: 1 } },
-    });
     return new RoleplayHelpDto({
       suggestions,
       helpLeft: MAX_HELP - s.helpCount - 1,
@@ -369,15 +394,17 @@ export class RoleplayService {
         message: 'stt_no_speech',
       });
     }
-    if (s.transcribeCount >= MAX_TRANSCRIBE) {
+    this.stt.assertRate(access.tokenId);
+    if (!(await this.take(id, 'transcribeCount', MAX_TRANSCRIBE))) {
       throw fail('roleplay_transcribe_limit');
     }
-    this.stt.assertRate(access.tokenId);
-    const result = await this.stt.transcribe(file, dto.language ?? 'en');
-    await this.prisma.roleplaySession.update({
-      where: { id },
-      data: { transcribeCount: { increment: 1 } },
-    });
+    let result: Awaited<ReturnType<SttService['transcribe']>>;
+    try {
+      result = await this.stt.transcribe(file, dto.language ?? 'en');
+    } catch (err) {
+      await this.giveBack(id, 'transcribeCount');
+      throw err;
+    }
     return new RoleplayTranscriptionDto({
       text: result.text,
       language: result.language,
@@ -402,6 +429,8 @@ export class RoleplayService {
     const userTurns = userTurnsOf(dto.transcript);
     if (!userTurns) throw fail('roleplay_no_turns');
     if (userTurns > s.maxTurns) throw fail('roleplay_turn_limit');
+    if (!(await this.take(id, 'finishCount', MAX_FINISH)))
+      throw fail('roleplay_finish_limit');
 
     let parsed: ReturnType<typeof parseSummary>;
     try {
@@ -417,6 +446,7 @@ export class RoleplayService {
       );
       parsed = parseSummary(raw, s.ctx.phrases);
     } catch (err) {
+      await this.giveBack(id, 'finishCount');
       throw this.aiFailed(err);
     }
 
@@ -430,15 +460,24 @@ export class RoleplayService {
     const stepsDone = missionComplete
       ? s.ctx.steps.map((_, i) => i)
       : s.stepsDone;
+    // Never lower than the server's count: a trimmed transcript must not
+    // take the session off today's quota.
+    const turns = Math.max(s.userTurns, userTurns);
     await this.prisma.roleplaySession.update({
       where: { id },
-      data: { endedAt, durationSec, missionComplete, userTurns, stepsDone },
+      data: {
+        endedAt,
+        durationSec,
+        missionComplete,
+        userTurns: turns,
+        stepsDone,
+      },
     });
     return new RoleplaySummaryDto({
       ...parsed,
       missionComplete,
       durationSec,
-      userTurns,
+      userTurns: turns,
       stepsDone,
       mode: modeOfTurns(s.maxTurns),
     });
