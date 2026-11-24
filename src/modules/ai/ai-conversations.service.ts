@@ -51,12 +51,14 @@ export class AiConversationsService {
     conversationId: string | undefined,
     text: string,
     word?: { word: string; meaning?: string },
+    card?: string,
   ): Promise<string> {
     const message = {
       role: AiRoleDb.USER,
       text,
       word: word?.word,
       wordMeaning: word?.meaning,
+      card,
     };
     if (!conversationId) {
       const created = await this.prisma.aiConversation.create({
@@ -86,6 +88,7 @@ export class AiConversationsService {
       text: string;
       word?: string;
       wordMeaning?: string;
+      card?: string;
     },
   ): Promise<void> {
     await this.prisma.aiConversation.update({
@@ -136,6 +139,7 @@ export class AiConversationsService {
             word: m.word
               ? { word: m.word, meaning: m.wordMeaning ?? undefined }
               : undefined,
+            card: m.card ?? undefined,
             createdAt: m.createdAt,
           }),
       ),

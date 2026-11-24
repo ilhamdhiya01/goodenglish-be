@@ -119,6 +119,7 @@ export class AiService {
       dto.conversationId,
       last.text,
       word,
+      dto.context?.card,
     );
     return {
       conversationId,

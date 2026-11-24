@@ -56,7 +56,13 @@ describe('AiConversationsService', () => {
 
   it('adds to an existing thread and bumps its updatedAt', async () => {
     const { service, prisma } = setup();
-    const id = await service.saveQuestion('t1', 'c1', 'And "class"?');
+    const id = await service.saveQuestion(
+      't1',
+      'c1',
+      'And "class"?',
+      undefined,
+      'Are they at the hotel now?',
+    );
 
     expect(id).toBe('c1');
     expect(prisma.aiConversation.create).not.toHaveBeenCalled();
@@ -66,6 +72,7 @@ describe('AiConversationsService', () => {
     expect(args.data.messages.create).toMatchObject({
       role: 'USER',
       text: 'And "class"?',
+      card: 'Are they at the hotel now?',
     });
   });
 
@@ -109,6 +116,16 @@ describe('AiConversationsService', () => {
           text: 'Hi',
           word: 'lesson',
           wordMeaning: null,
+          card: null,
+          createdAt: at,
+        },
+        {
+          id: 'm3',
+          role: 'USER',
+          text: 'cek ini',
+          word: null,
+          wordMeaning: null,
+          card: 'Are they at the hotel now?',
           createdAt: at,
         },
         {
@@ -123,9 +140,10 @@ describe('AiConversationsService', () => {
     });
 
     const conv = await service.get('t1', 'c1');
-    expect(conv.messages.map((m) => [m.role, m.word])).toEqual([
-      ['user', { word: 'lesson', meaning: undefined }],
-      ['model', undefined],
+    expect(conv.messages.map((m) => [m.role, m.word, m.card])).toEqual([
+      ['user', { word: 'lesson', meaning: undefined }, undefined],
+      ['user', undefined, 'Are they at the hotel now?'],
+      ['model', undefined, undefined],
     ]);
   });
 

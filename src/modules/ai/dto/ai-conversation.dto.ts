@@ -18,6 +18,8 @@ export class AiChatMessageDto {
   text!: string;
   // The word card the question came from.
   word?: { word: string; meaning?: string };
+  // The Ulang mistake card it came from: that card's right sentence.
+  card?: string;
   createdAt!: Date;
 
   constructor(partial: Partial<AiChatMessageDto>) {

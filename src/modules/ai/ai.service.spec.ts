@@ -129,6 +129,28 @@ describe('AiService', () => {
     expect(req.config.systemInstruction).toContain('"have"');
   });
 
+  it('puts the Ulang mistake card in the prompt and stores its sentence', async () => {
+    const { service, conversations } = setup();
+    generateContentStream.mockResolvedValue(chunks('ok'));
+    const card =
+      'Kalimat salah: one of countries\nYang benar: one of the countries';
+    await service.startChat(access(), {
+      messages: [{ role: 'user', text: 'kenapa salah?' }],
+      context: { mistake: card, card: 'one of the countries' },
+    });
+    const { systemInstruction } = sent(generateContentStream).config;
+    expect(systemInstruction).toContain('Kartu kesalahan di Ulang');
+    expect(systemInstruction).toContain(card);
+    // Kept with the question, so the thread shows the card after a reload.
+    expect(conversations.saveQuestion).toHaveBeenCalledWith(
+      't1',
+      undefined,
+      'kenapa salah?',
+      undefined,
+      'one of the countries',
+    );
+  });
+
   it('gives the question back when Gemini refuses the request', async () => {
     const { service, quota, conversations } = setup();
     generateContentStream.mockRejectedValue(new Error('bad key'));
@@ -151,6 +173,7 @@ describe('AiService', () => {
       undefined,
       'Is "I has a car" correct?',
       { word: 'have', meaning: undefined },
+      undefined,
     );
   });
 

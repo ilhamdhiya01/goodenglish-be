@@ -48,4 +48,18 @@ export class AiContextDto {
   @IsString()
   @MaxLength(3000)
   note?: string;
+
+  // The Ulang mistake card the question came from (its sentences, the
+  // learner's answer and the app's explanation), flattened to text.
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  mistake?: string;
+
+  // That card's right sentence, stored with the question so the thread
+  // shows which card it was about.
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  card?: string;
 }
