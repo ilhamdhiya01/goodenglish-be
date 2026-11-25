@@ -141,6 +141,11 @@ describe('AiService', () => {
     const { systemInstruction } = sent(generateContentStream).config;
     expect(systemInstruction).toContain('Kartu kesalahan di Ulang');
     expect(systemInstruction).toContain(card);
+    // "artinya apa?" is about this card, not an earlier one in the thread.
+    expect(systemInstruction).toContain('jelaskan arti "one of the countries"');
+    expect(systemInstruction).toContain(
+      'bukan kalimat dari pesan-pesan sebelumnya',
+    );
     // Kept with the question, so the thread shows the card after a reload.
     expect(conversations.saveQuestion).toHaveBeenCalledWith(
       't1',
